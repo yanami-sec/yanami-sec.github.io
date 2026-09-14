@@ -306,3 +306,26 @@ iframe[src*="vimeo.com"] {
 #page-header.full_page {
     filter: brightness(1.30);
 }
+/* 全站背景壁纸 */
+body {
+    background-image: url('/img/laoba.png') !important;
+    background-attachment: fixed !important;
+    background-position: center center !important;
+    background-size: cover !important;
+    background-repeat: no-repeat !important;
+}
+
+#web_bg {
+    background-image: url('/img/laoba.png') !important;
+    background-attachment: fixed !important;
+    background-position: center center !important;
+    background-size: cover !important;
+    background-repeat: no-repeat !important;
+}
+/* 首页顶部图完整显示高度 */
+#page-header.full_page {
+    height: 100vh !important;
+    background-position: center center !important;
+    background-size: cover !important;
+}
+
