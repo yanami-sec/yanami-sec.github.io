@@ -301,3 +301,8 @@ iframe[src*="vimeo.com"] {
     aspect-ratio: 16 / 9;
     height: auto;
 }
+
+/* 高亮图 */
+#page-header.full_page {
+    filter: brightness(1.30);
+}
