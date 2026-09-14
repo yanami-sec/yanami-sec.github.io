@@ -7,7 +7,7 @@
 <meta property="og:locale" content="zh_CN">
 <meta property="og:image" content="https://yanami-sec.github.io/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/3.2.jpg">
 <meta property="article:published_time" content="2026-09-14T09:20:29.000Z">
-<meta property="article:modified_time" content="2026-09-14T09:45:31.105Z">
+<meta property="article:modified_time" content="2026-09-14T10:17:09.010Z">
 <meta property="article:author" content="Anna Yanami">
 <meta property="article:tag" content="Pwn">
 <meta property="article:tag" content="VSCode">
@@ -20,7 +20,7 @@
   "url": "https://yanami-sec.github.io/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/",
   "image": "https://yanami-sec.github.io/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/3.2.jpg",
   "datePublished": "2026-09-14T09:20:29.000Z",
-  "dateModified": "2026-09-14T09:45:31.105Z",
+  "dateModified": "2026-09-14T10:17:09.010Z",
   "author": [
     {
       "@type": "Person",
@@ -203,8 +203,8 @@
   isHighlightShrink: false,
   isToc: true,
   pageType: 'post'
-}</script><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/css/runtime.css"><meta name="generator" content="Hexo 8.1.2"></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/laoba.png);"></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/3.2.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Yanami Security Lab</span></a><a class="nav-page-title" href="/"><span class="site-name">WSL2+vscode配置基础pwn环境</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"></div></nav><div id="post-info"><h1 class="post-title">WSL2+vscode配置基础pwn环境</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-09-14T09:20:29.000Z" title="发表于 2026-09-14 17:20:29">2026-09-14</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-09-14T09:45:31.105Z" title="更新于 2026-09-14 17:45:31">2026-09-14</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/Pwn/">Pwn</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h2 id="检查虚拟化"><a href="#检查虚拟化" class="headerlink" title="检查虚拟化"></a>检查虚拟化</h2><p>WSL2 需要 CPU 虚拟化<br>打开任务管理器，查看性能看看右下角是否为虚拟化</p>
-
+}</script><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/css/runtime.css"><meta name="generator" content="Hexo 8.1.2"></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/laoba.png);"></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/3.2.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Yanami Security Lab</span></a><a class="nav-page-title" href="/"><span class="site-name">WSL2+vscode配置基础pwn环境</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"></div></nav><div id="post-info"><h1 class="post-title">WSL2+vscode配置基础pwn环境</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-09-14T09:20:29.000Z" title="发表于 2026-09-14 17:20:29">2026-09-14</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-09-14T10:17:09.010Z" title="更新于 2026-09-14 18:17:09">2026-09-14</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/Pwn/">Pwn</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h2 id="检查虚拟化"><a href="#检查虚拟化" class="headerlink" title="检查虚拟化"></a>检查虚拟化</h2><p>WSL2 需要 CPU 虚拟化<br>打开任务管理器，查看性能看看右下角是否为虚拟化</p>
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-01.png" class="">
 <p>这里如果是已禁用我建议进入BIOS开：AMD:SVM Mode</p>
 <h2 id="开启Windows功能"><a href="#开启Windows功能" class="headerlink" title="开启Windows功能"></a>开启Windows功能</h2><p>管理员打开powershell<br>执行</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart</span><br></pre></td></tr></table></figure>
@@ -213,12 +213,12 @@
 <p>重启一下电脑</p>
 <h2 id="安装-WSL2"><a href="#安装-WSL2" class="headerlink" title="安装 WSL2"></a>安装 WSL2</h2><p>这里我们来安装ubuntu22.04<br>首先我们先更新一下wsl</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wsl --update</span><br></pre></td></tr></table></figure>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-02.png" class="">
 <p>重启一下wsl</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wsl --shutdown</span><br></pre></td></tr></table></figure>
 <p>查看可用的版本</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wsl --list --online</span><br></pre></td></tr></table></figure>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-03.png" class="">
 <p>这里我们安装ubuntu-22.04<br>命令如下</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wsl --install -d Ubuntu-22.04</span><br></pre></td></tr></table></figure>
 <p>看powershell<br>这里会出现<code>Create a default Unix user account:</code>这个是让我建用户名<br>我这里用我的名字yanami，输入完回车就可以了<br>接着会出现<code>New password:</code>这个是让我们输入密码<br><strong>注意一下Linux 输入密码时：</strong></p>
@@ -226,13 +226,13 @@
 <li>屏幕不会显示 <code>*</code></li>
 <li>光标也不会动<br>输入完回车就好了<br>接下来会让你确定密码在输入一遍就行</li>
 </ul>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-04.png" class="">
 <p>这里就是可以了。</p>
 <h2 id="迁移到别的盘"><a href="#迁移到别的盘" class="headerlink" title="迁移到别的盘"></a>迁移到别的盘</h2><p>现在的是在C盘，我们可以把它迁移到我们指定的文件夹里面<br>首先关闭ubuntu，在powershell输入</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wsl --shutdown</span><br></pre></td></tr></table></figure>
 <p>确认一下输入</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wsl -l -v</span><br></pre></td></tr></table></figure>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-05.png" class="">
 <p><strong>这里一定是stopped</strong><br>接下来创建一个文件夹我这里是在D盘建了一个WSL文件夹<br>D:\WSL<br>以后的结构就是</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">D:</span><br><span class="line">└── WSL</span><br><span class="line">    ├── Ubuntu-22.04</span><br><span class="line">    └── ubuntu22.04.tar</span><br></pre></td></tr></table></figure>
 <p>导出ubuntu,在powershell输入</p>
@@ -240,23 +240,23 @@
 <p>这个过程可能几分钟。它会把整个 Ubuntu 打包。<br>完成之后去看看你的那个文件夹是否有</p>
 <p>接下来注销原来C盘的ubuntu,在powershell输入</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wsl --unregister Ubuntu-22.04</span><br></pre></td></tr></table></figure>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-06.png" class="">
 
 <p>接下来导入到D盘</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wsl --import Ubuntu-22.04 D:\WSL\Ubuntu-22.04 D:\WSL\ubuntu22.04.tar --version 2</span><br></pre></td></tr></table></figure>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-07.png" class="">
 
 <p>怎么看是否成功呐，在powershell输入</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">reg query &quot;HKCU\Software\Microsoft\Windows\CurrentVersion\Lxss&quot;</span><br></pre></td></tr></table></figure>
 <p>查看注册表</p>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-08.png" class="">
 <p>查看你的这个</p>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-09.png" class="">
 <p>会发现是在D盘</p>
 <h2 id="安装vscode插件"><a href="#安装vscode插件" class="headerlink" title="安装vscode插件"></a>安装vscode插件</h2><p>这里我相信大家应该都安装vscode了吧，虽然是面向新手，但是要是不会安装vscode动手能力就太差了，八奈见会鄙视你的。<br>扩展里面搜索：Remote Development</p>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-10.png" class="">
 <p>安装就好</p>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-11.png" class="">
 
 <h2 id="用vscode打开wsl2"><a href="#用vscode打开wsl2" class="headerlink" title="用vscode打开wsl2"></a>用vscode打开wsl2</h2><p>打开ubuntu</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">wsl</span><br></pre></td></tr></table></figure>
@@ -265,10 +265,10 @@
 <p>接着输入</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">code .</span><br></pre></td></tr></table></figure>
 <p>等待几秒安装完成（这里下载慢的可以去网上找找如何代理），可能会出现代理问题，防火墙问题，让 WSL 的网络请求走代理 + 让 VS Code Server 下载 CDN 请求走代理。</p>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-12.png" class="">
 <p>这样就可以了</p>
 <h2 id="换源"><a href="#换源" class="headerlink" title="换源"></a>换源</h2><p>在vscode新建终端</p>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-13.png" class="">
 <p>先备份原源,在终端输入</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo cp /etc/apt/sources.list /etc/apt/sources.list.bak</span><br></pre></td></tr></table></figure>
 <p>我们这里换中科大的源<br>输入</p>
@@ -277,10 +277,10 @@
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">sudo tee /etc/apt/sources.list &lt;&lt; &#x27;EOF&#x27;</span><br><span class="line">deb https://mirrors.ustc.edu.cn/ubuntu/ jammy main restricted universe multiverse</span><br><span class="line">deb https://mirrors.ustc.edu.cn/ubuntu/ jammy-updates main restricted universe multiverse</span><br><span class="line">deb https://mirrors.ustc.edu.cn/ubuntu/ jammy-backports main restricted universe multiverse</span><br><span class="line">deb https://mirrors.ustc.edu.cn/ubuntu/ jammy-security main restricted universe multiverse</span><br><span class="line">EOF</span><br></pre></td></tr></table></figure>
 <p>然后输入</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt update</span><br></pre></td></tr></table></figure>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-14.png" class="">
 <p>接下来输入</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt upgrade -y</span><br></pre></td></tr></table></figure>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-15.png" class="">
 <p>好了</p>
 <h2 id="python换源"><a href="#python换源" class="headerlink" title="python换源"></a>python换源</h2><p>ubuntu22.04自带了python3.10<br>我们只需要换源就可以了<br>输入</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">mkdir -p ~/.config/pip &amp;&amp; cat &gt; ~/.config/pip/pip.conf &lt;&lt; &#x27;EOF&#x27;</span><br><span class="line">[global]</span><br><span class="line">index-url = https://pypi.mirrors.ustc.edu.cn/simple</span><br><span class="line">trusted-host = pypi.mirrors.ustc.edu.cn</span><br><span class="line">EOF</span><br></pre></td></tr></table></figure>
@@ -288,16 +288,16 @@
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt install -y python3-pip</span><br></pre></td></tr></table></figure>
 <p>检查一下</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pip3 --version</span><br></pre></td></tr></table></figure>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-16.png" class="">
 <p>继续检查</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pip3 config list</span><br></pre></td></tr></table></figure>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-17.png" class="">
 
 <h2 id="下载pwn工具"><a href="#下载pwn工具" class="headerlink" title="下载pwn工具"></a>下载pwn工具</h2><p>上面没问题直接输入</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pip3 install pwntools</span><br></pre></td></tr></table></figure>
 <p>安装过程可能会有标黄，那个没事的，只要不是标红就可以<br>安装完测试一下<br>输入<code>python3</code><br>然后输入</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">from pwn import *</span><br><span class="line">print(&quot;pwntools ok&quot;)</span><br></pre></td></tr></table></figure>
-
+<img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/pwn-18.png" class="">
 <p>这样就是可以了<br>python退出是输入<code>exit()</code><br>继续安装</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">sudo apt install -y gdb git build-essential checksec patchelf</span><br></pre></td></tr></table></figure>
 
