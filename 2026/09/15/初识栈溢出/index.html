@@ -1,0 +1,376 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>初识栈溢出：Pwn 入门基础 | Yanami Security Lab</title><meta name="author" content="Anna Yanami"><meta name="copyright" content="Anna Yanami"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="什么是栈？在程序运行过程中，内存通常被划分为：其中：  代码段（Text）：保存程序指令 数据段（Data）：保存全局变量 堆（Heap）：动态申请内存 栈（Stack）：保存函数调用信息Pwn 中最早接触的漏洞，大部分来自：   栈上的局部变量没有限制大小，导致覆盖重要数据。  栈的特点栈有两个重要特点：（1）后进先出例如： 123push Apush Bpush C 栈：执行： 1pop 取出">
+<meta property="og:type" content="article">
+<meta property="og:title" content="初识栈溢出：Pwn 入门基础">
+<meta property="og:url" content="https://yanami-sec.github.io/2026/09/15/%E5%88%9D%E8%AF%86%E6%A0%88%E6%BA%A2%E5%87%BA/index.html">
+<meta property="og:site_name" content="Yanami Security Lab">
+<meta property="og:description" content="什么是栈？在程序运行过程中，内存通常被划分为：其中：  代码段（Text）：保存程序指令 数据段（Data）：保存全局变量 堆（Heap）：动态申请内存 栈（Stack）：保存函数调用信息Pwn 中最早接触的漏洞，大部分来自：   栈上的局部变量没有限制大小，导致覆盖重要数据。  栈的特点栈有两个重要特点：（1）后进先出例如： 123push Apush Bpush C 栈：执行： 1pop 取出">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://yanami-sec.github.io/img/huaban.png">
+<meta property="article:published_time" content="2026-09-15T02:29:23.000Z">
+<meta property="article:modified_time" content="2026-09-15T02:40:10.328Z">
+<meta property="article:author" content="Anna Yanami">
+<meta property="article:tag" content="Pwn">
+<meta property="article:tag" content="栈溢出">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://yanami-sec.github.io/img/huaban.png"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "初识栈溢出：Pwn 入门基础",
+  "url": "https://yanami-sec.github.io/2026/09/15/%E5%88%9D%E8%AF%86%E6%A0%88%E6%BA%A2%E5%87%BA/",
+  "image": "https://yanami-sec.github.io/img/huaban.png",
+  "datePublished": "2026-09-15T02:29:23.000Z",
+  "dateModified": "2026-09-15T02:40:10.328Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Anna Yanami",
+      "url": "https://yanami-sec.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/avatar.jpg"><link rel="canonical" href="https://yanami-sec.github.io/2026/09/15/%E5%88%9D%E8%AF%86%E6%A0%88%E6%BA%A2%E5%87%BA/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.7.0"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.3.1/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        const data = { value }
+
+        if (ttl != null) {
+          data.expiry = Date.now() + ttl * 86400000
+        }
+
+        localStorage.setItem(key, JSON.stringify(data))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return
+
+        try {
+          const data = JSON.parse(itemStr)
+
+          if (data.expiry && Date.now() > data.expiry) {
+            localStorage.removeItem(key)
+            return
+          }
+
+          return data.value
+        } catch {
+          localStorage.removeItem(key)
+        }
+      }
+    }
+
+    const scriptCache = new Map()
+    const cssCache = new Map()
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => {
+        if (scriptCache.has(url)) {
+          return scriptCache.get(url)
+        }
+
+        const promise = new Promise((resolve, reject) => {
+          const script = document.createElement('script')
+
+          script.src = url
+          script.async = true
+
+          for (const key in attr) {
+            script.setAttribute(key, attr[key])
+          }
+
+          script.onload = resolve
+          script.onerror = reject
+
+          document.head.appendChild(script)
+        })
+
+        scriptCache.set(url, promise)
+
+        return promise
+      },
+      getCSS: (url, id) => {
+        if (cssCache.has(url)) {
+          return cssCache.get(url)
+        }
+
+        const promise = new Promise((resolve, reject) => {
+          const link = document.createElement('link')
+
+          link.rel = 'stylesheet'
+          link.href = url
+
+          if (id) {
+            link.id = id
+          }
+
+          link.onload = resolve
+          link.onerror = reject
+
+          document.head.appendChild(link)
+        })
+
+        cssCache.set(url, promise)
+
+        return promise
+      },
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const metaThemeColor = document.querySelector('meta[name="theme-color"]')
+      const activateDarkMode = () => {
+        document.documentElement.dataset.theme = 'dark'
+        if (metaThemeColor !== null) {
+          metaThemeColor.setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.dataset.theme = 'light'
+        if (metaThemeColor !== null) {
+          metaThemeColor.setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":800,"highlightFullpage":false,"highlightMacStyle":true},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'null',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: '初识栈溢出：Pwn 入门基础',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/css/runtime.css"><meta name="generator" content="Hexo 8.1.2"></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/laoba.png);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">4</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">4</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/link/"><i class="fa-fw fas fa-link"></i><span> 友链</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-heart"></i><span> 关于</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/huaban.png);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Yanami Security Lab</span></a><a class="nav-page-title" href="/"><span class="site-name">初识栈溢出：Pwn 入门基础</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/link/"><i class="fa-fw fas fa-link"></i><span> 友链</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-heart"></i><span> 关于</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">初识栈溢出：Pwn 入门基础</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-09-15T02:29:23.000Z" title="发表于 2026-09-15 10:29:23">2026-09-15</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-09-15T02:40:10.328Z" title="更新于 2026-09-15 10:40:10">2026-09-15</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/Pwn/">Pwn</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h2 id="什么是栈？"><a href="#什么是栈？" class="headerlink" title="什么是栈？"></a>什么是栈？</h2><p>在程序运行过程中，内存通常被划分为：<br><img src="stack-01.png" alt="image" width="279"><br>其中：</p>
+<ul>
+<li><strong>代码段（Text）</strong>：保存程序指令</li>
+<li><strong>数据段（Data）</strong>：保存全局变量</li>
+<li><strong>堆（Heap）</strong>：动态申请内存</li>
+<li><strong>栈（Stack）</strong>：保存函数调用信息<br>Pwn 中最早接触的漏洞，大部分来自：</li>
+</ul>
+<blockquote>
+<p>栈上的局部变量没有限制大小，导致覆盖重要数据。</p>
+</blockquote>
+<h1 id="栈的特点"><a href="#栈的特点" class="headerlink" title="栈的特点"></a>栈的特点</h1><p>栈有两个重要特点：<br>（1）后进先出<br>例如：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">push A</span><br><span class="line">push B</span><br><span class="line">push C</span><br></pre></td></tr></table></figure>
+<p>栈：<br><img src="stack-02.png" alt="image" width="195"><br>执行：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pop</span><br></pre></td></tr></table></figure>
+<p>取出的：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">C</span><br></pre></td></tr></table></figure>
+<p>（2）向低地址增长</p>
+<p>假设：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">高地址</span><br><span class="line">0x1000</span><br><span class="line">0x0ff0</span><br><span class="line">0x0fe0</span><br><span class="line">低地址</span><br></pre></td></tr></table></figure>
+<p>压入数据：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">push</span><br></pre></td></tr></table></figure>
+<p>实际上：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">RSP下降</span><br></pre></td></tr></table></figure>
+<p>例如：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">push rax</span><br></pre></td></tr></table></figure>
+<p>执行：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">rsp = rsp - 8</span><br><span class="line">[rsp]=rax</span><br></pre></td></tr></table></figure>
+<p>所以：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">高地址</span><br><span class="line"></span><br><span class="line">旧数据</span><br><span class="line">↓</span><br><span class="line">新数据</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">低地址</span><br></pre></td></tr></table></figure>
+<h1 id="什么是函数栈帧（Stack-Frame）"><a href="#什么是函数栈帧（Stack-Frame）" class="headerlink" title="什么是函数栈帧（Stack Frame）"></a>什么是函数栈帧（Stack Frame）</h1><p>每调用一个函数，系统都会为它创建一个空间。<br>例如：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">void func()</span><br><span class="line">&#123;</span><br><span class="line"></span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>调用：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">main()</span><br><span class="line">   |</span><br><span class="line">   |</span><br><span class="line">   v</span><br><span class="line">func()</span><br></pre></td></tr></table></figure>
+<p>进入 func：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">创建 func 的栈帧</span><br></pre></td></tr></table></figure>
+<h1 id="64位函数调用栈结构"><a href="#64位函数调用栈结构" class="headerlink" title="64位函数调用栈结构"></a>64位函数调用栈结构</h1><p>例如：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">void func()</span><br><span class="line">&#123;</span><br><span class="line">    char buf[20];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>进入函数后：<br><img src="stack-03.png" alt="image" width="315"><br>解释：<br>Return Address（返回地址）<br>最重要。<br>保存：</p>
+<blockquote>
+<p>函数执行结束后应该回到哪里。</p>
+</blockquote>
+<p>例如：<br>main：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">call func</span><br></pre></td></tr></table></figure>
+<p>调用：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">func()</span><br></pre></td></tr></table></figure>
+<p>CPU 自动保存：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">call 后下一条指令地址</span><br></pre></td></tr></table></figure>
+<p>保存位置：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Return Address</span><br></pre></td></tr></table></figure>
+<p>函数结束：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ret</span><br></pre></td></tr></table></figure>
+<p>执行：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">RIP = Return Address</span><br></pre></td></tr></table></figure>
+<p>所以：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">返回地址</span><br><span class="line">        ↓</span><br><span class="line">       RIP</span><br><span class="line">        ↓</span><br><span class="line">执行哪里</span><br></pre></td></tr></table></figure>
+<p>Saved RBP<br>RBP：<br>栈底指针。<br>函数进入：<br>通常：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">push rbp</span><br><span class="line">mov rbp,rsp</span><br></pre></td></tr></table></figure>
+<p>保存旧函数的栈基址。<br>结构：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">main栈帧</span><br><span class="line"></span><br><span class="line">      |</span><br><span class="line">      |</span><br><span class="line">      v</span><br><span class="line"></span><br><span class="line">保存main的RBP</span><br><span class="line"></span><br><span class="line">      |</span><br><span class="line">      |</span><br><span class="line">      v</span><br><span class="line"></span><br><span class="line">func栈帧</span><br></pre></td></tr></table></figure>
+<p>buf<br>程序定义：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">char buf[20]</span><br></pre></td></tr></table></figure>
+<p>就在这里。</p>
+<h1 id="32位函数栈结构"><a href="#32位函数栈结构" class="headerlink" title="32位函数栈结构"></a>32位函数栈结构</h1><p>32位类似：<br><img src="stack-04.png" alt="image" width="314"><br>区别：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>32位</th>
+<th>64位</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>返回地址</td>
+<td>4字节</td>
+<td>8字节</td>
+</tr>
+<tr>
+<td>栈指针</td>
+<td>ESP</td>
+<td>RSP</td>
+</tr>
+<tr>
+<td>栈底</td>
+<td>EBP</td>
+<td>RBP</td>
+</tr>
+<tr>
+<td>控制目标</td>
+<td>EIP</td>
+<td>RIP</td>
+</tr>
+</tbody></table>
+<h1 id="栈溢出的产生"><a href="#栈溢出的产生" class="headerlink" title="栈溢出的产生"></a>栈溢出的产生</h1><p>看一个漏洞：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">void vuln()</span><br><span class="line">&#123;</span><br><span class="line">    char buf[20];</span><br><span class="line">    gets(buf);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>问题：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">buf</span><br></pre></td></tr></table></figure>
+<p>只有：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">20字节</span><br></pre></td></tr></table></figure>
+<p>但是：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">gets()</span><br></pre></td></tr></table></figure>
+<p>不会检查输入长度。<br>正常输入：<br>例如：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hello</span><br></pre></td></tr></table></figure>
+<p>内存：<br><img src="stack-05.png" alt="image" width="233"><br>没有问题。</p>
+<h1 id="输入超过长度发生什么？"><a href="#输入超过长度发生什么？" class="headerlink" title="输入超过长度发生什么？"></a>输入超过长度发生什么？</h1><p>输入：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA</span><br></pre></td></tr></table></figure>
+<p>假设：<br>buf：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">20字节</span><br></pre></td></tr></table></figure>
+<p>但是输入：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">40字节</span><br></pre></td></tr></table></figure>
+<p>数据继续写：<br><img src="stack-06.png" alt="image" width="263"><br>覆盖顺序：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">buf</span><br><span class="line"> ↓</span><br><span class="line">Saved RBP</span><br><span class="line"> ↓</span><br><span class="line">Return Address</span><br><span class="line"> ↓</span><br><span class="line">RIP/EIP</span><br></pre></td></tr></table></figure>
+<h1 id="为什么覆盖返回地址可以控制程序？"><a href="#为什么覆盖返回地址可以控制程序？" class="headerlink" title="为什么覆盖返回地址可以控制程序？"></a>为什么覆盖返回地址可以控制程序？</h1><p>正常：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">call vuln()</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">执行结束</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">ret</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">RIP = 原来的返回地址</span><br></pre></td></tr></table></figure>
+<p>流程：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">main</span><br><span class="line"></span><br><span class="line"> |</span><br><span class="line"></span><br><span class="line"> v</span><br><span class="line"></span><br><span class="line">vuln</span><br><span class="line"></span><br><span class="line"> |</span><br><span class="line"></span><br><span class="line">ret</span><br><span class="line"></span><br><span class="line"> |</span><br><span class="line"></span><br><span class="line">main继续</span><br></pre></td></tr></table></figure>
+<p>攻击：<br>修改：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">Return Address</span><br></pre></td></tr></table></figure>
+<p>例如：<br>原来：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">0x401234</span><br></pre></td></tr></table></figure>
+<p>改成：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">0x401156</span><br></pre></td></tr></table></figure>
+<p>win函数地址。<br>执行：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ret</span><br></pre></td></tr></table></figure>
+<p>CPU：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">RIP = 0x401156</span><br></pre></td></tr></table></figure>
+<p>于是：<br><img src="stack-07.png" alt="image" width="274"></p>
+<h1 id="栈溢出的本质"><a href="#栈溢出的本质" class="headerlink" title="栈溢出的本质"></a>栈溢出的本质</h1><p>一句话：</p>
+<blockquote>
+<p>栈溢出就是利用输入长度超过缓冲区大小，覆盖栈上的控制数据，从而控制程序执行流程。</p>
+</blockquote>
+<p>核心链：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">输入数据</span><br><span class="line">     |</span><br><span class="line">     ↓</span><br><span class="line">覆盖局部变量</span><br><span class="line">     |</span><br><span class="line">     ↓</span><br><span class="line">覆盖Saved RBP</span><br><span class="line">     |</span><br><span class="line">     ↓</span><br><span class="line">覆盖Return Address</span><br><span class="line">     |</span><br><span class="line">     ↓</span><br><span class="line">控制RIP/EIP</span><br><span class="line">     |</span><br><span class="line">     ↓</span><br><span class="line">执行攻击者指定代码</span><br></pre></td></tr></table></figure>
+<h1 id="32位和64位栈溢出区别"><a href="#32位和64位栈溢出区别" class="headerlink" title="32位和64位栈溢出区别"></a>32位和64位栈溢出区别</h1><p>32位<br>目标：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">EIP</span><br></pre></td></tr></table></figure>
+<p>payload：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">padding</span><br><span class="line"></span><br><span class="line">+</span><br><span class="line"></span><br><span class="line">目标地址</span><br></pre></td></tr></table></figure>
+<p>因为：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">return address = 4字节</span><br></pre></td></tr></table></figure>
+<p>64位<br>目标：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">RIP</span><br></pre></td></tr></table></figure>
+<p>payload：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">padding</span><br><span class="line"></span><br><span class="line">+</span><br><span class="line"></span><br><span class="line">目标地址</span><br></pre></td></tr></table></figure>
+<p>但是：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">return address = 8字节</span><br></pre></td></tr></table></figure>
+<p>同时：<br>64位函数参数：<br>不在栈上。<br>例如：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">system(&quot;/bin/sh&quot;)</span><br></pre></td></tr></table></figure>
+<p>需要：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">RDI=&quot;/bin/sh&quot;</span><br></pre></td></tr></table></figure>
+<p>所以需要：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pop rdi</span><br><span class="line">ret</span><br></pre></td></tr></table></figure>
+<h1 id="栈溢出的攻击流程总结图"><a href="#栈溢出的攻击流程总结图" class="headerlink" title="栈溢出的攻击流程总结图"></a>栈溢出的攻击流程总结图</h1><img src="stack-08.png" alt="image" width="323">
+
+<h1 id="最后记忆"><a href="#最后记忆" class="headerlink" title="最后记忆"></a>最后记忆</h1><p>学习栈溢出一定记住：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">函数调用</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">创建栈帧</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">保存返回地址</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">输入超过数组大小</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">覆盖返回地址</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">控制 RIP/EIP</span><br><span class="line">    |</span><br><span class="line">    v</span><br><span class="line">控制程序执行</span><br></pre></td></tr></table></figure>
+
+<p>对于 Pwn：</p>
+<ul>
+<li><strong>32位：目标是 EIP</strong></li>
+<li><strong>64位：目标是 RIP</strong></li>
+<li><strong>RSP 决定栈的位置</strong></li>
+<li><strong>RBP 帮助定位栈帧</strong></li>
+<li><strong>Return Address 是最核心的数据</strong><br>下一节：<br><strong>《栈溢出实战：从控制 RIP 到 ret2text（32位+64位）》</strong><br>这部分会开始真正写 payload。</li>
+</ul>
+<p>别再让等等耗尽你所有的可能。<br>不要把梦想留给未来的某一天，现在就是开始的时刻。</p>
+<p><strong>Don’t let someday steal all your possibilities.</strong><br><strong>Start now, keep moving, and become who you want to be.</strong></p>
+<p>—— yanami</p>
+</article><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/Pwn/">Pwn</a><a class="post-meta__tags" href="/tags/%E6%A0%88%E6%BA%A2%E5%87%BA/">栈溢出</a></div><div class="post-share"><div class="social-share" data-image="/img/huaban.png" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related full-width" href="/2026/09/14/%E5%88%9D%E8%AF%86%E5%AF%84%E5%AD%98%E5%99%A8/" title="初识寄存器"><img class="cover" src="/img/jicunqi.jpg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">初识寄存器</div></div><div class="info-2"><div class="info-item-1">x86 &#x2F; x86-64 寄存器详解（Pwn 入门基础）在学习 Pwn 时，寄存器是必须掌握的基础知识。程序运行过程中，CPU 通过寄存器保存：  数据 地址 函数参数 返回值 当前执行位置 栈信息理解寄存器，实际上就是理解程序如何运行、函数如何调用以及漏洞利用如何控制程序流程。x86 架构主要分为： 32 位（x86） 64 位（x86-64 &#x2F; amd64）二者最大的区别： 32 位寄存器宽度为 32 bit 64 位寄存器宽度为 64 bit例如：  1234532位:EAX64位:RAX 64 位寄存器通常是在原来的 32 位寄存器前面加 R。 通用寄存器x86 提供多个通用寄存器，用于存储临时数据、地址以及计算结果。 32 位寄存器   寄存器 名称 作用    EAX Accumulator 累加器   EBX Base Register 基址寄存器   ECX Counter 计数器   EDX Data Register 数据寄存器   ESI Source Index 源地址索引   EDI Destination Index 目标地址索引 ...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/" title="WSL2+vscode配置基础pwn环境"><img class="cover" src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/3.2.jpg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-14</div><div class="info-item-2">WSL2+vscode配置基础pwn环境</div></div><div class="info-2"><div class="info-item-1">检查虚拟化WSL2 需要 CPU 虚拟化打开任务管理器，查看性能看看右下角是否为虚拟化  这里如果是已禁用我建议进入BIOS开：AMD:SVM Mode 开启Windows功能管理员打开powershell执行 1dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart 然后输入 1dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart 重启一下电脑 安装 WSL2这里我们来安装ubuntu22.04首先我们先更新一下wsl 1wsl --update  重启一下wsl 1wsl --shutdown 查看可用的版本 1wsl --list --online  这里我们安装ubuntu-22.04命令如下 1wsl --install -d Ubuntu-22.04 看powershell这里会出现Create a default Un...</div></div></div></a><a class="pagination-related" href="/2026/09/14/%E5%88%9D%E8%AF%86%E5%AF%84%E5%AD%98%E5%99%A8/" title="初识寄存器"><img class="cover" src="/img/jicunqi.jpg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-14</div><div class="info-item-2">初识寄存器</div></div><div class="info-2"><div class="info-item-1">x86 &#x2F; x86-64 寄存器详解（Pwn 入门基础）在学习 Pwn 时，寄存器是必须掌握的基础知识。程序运行过程中，CPU 通过寄存器保存：  数据 地址 函数参数 返回值 当前执行位置 栈信息理解寄存器，实际上就是理解程序如何运行、函数如何调用以及漏洞利用如何控制程序流程。x86 架构主要分为： 32 位（x86） 64 位（x86-64 &#x2F; amd64）二者最大的区别： 32 位寄存器宽度为 32 bit 64 位寄存器宽度为 64 bit例如：  1234532位:EAX64位:RAX 64 位寄存器通常是在原来的 32 位寄存器前面加 R。 通用寄存器x86 提供多个通用寄存器，用于存储临时数据、地址以及计算结果。 32 位寄存器   寄存器 名称 作用    EAX Accumulator 累加器   EBX Base Register 基址寄存器   ECX Counter 计数器   EDX Data Register 数据寄存器   ESI Source Index 源地址索引   EDI Destination Index 目标地址索引 ...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Anna Yanami</div><div class="author-info-description">Cyber Security Learner
+CTF Player | AI Security Researcher
+</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">4</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">4</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><a id="card-info-btn" href="https://yanami-sec.github.io/"><i class="fab fa-github"></i><span>Follow Me</span></a></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">Welcome to Yanami Security Lab.
+Cyber Security · CTF · AI · Research
+</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF%E6%A0%88%EF%BC%9F"><span class="toc-number">1.</span> <span class="toc-text">什么是栈？</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E6%A0%88%E7%9A%84%E7%89%B9%E7%82%B9"><span class="toc-number">2.</span> <span class="toc-text">栈的特点</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF%E5%87%BD%E6%95%B0%E6%A0%88%E5%B8%A7%EF%BC%88Stack-Frame%EF%BC%89"><span class="toc-number">3.</span> <span class="toc-text">什么是函数栈帧（Stack Frame）</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#64%E4%BD%8D%E5%87%BD%E6%95%B0%E8%B0%83%E7%94%A8%E6%A0%88%E7%BB%93%E6%9E%84"><span class="toc-number">4.</span> <span class="toc-text">64位函数调用栈结构</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#32%E4%BD%8D%E5%87%BD%E6%95%B0%E6%A0%88%E7%BB%93%E6%9E%84"><span class="toc-number">5.</span> <span class="toc-text">32位函数栈结构</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E6%A0%88%E6%BA%A2%E5%87%BA%E7%9A%84%E4%BA%A7%E7%94%9F"><span class="toc-number">6.</span> <span class="toc-text">栈溢出的产生</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E8%BE%93%E5%85%A5%E8%B6%85%E8%BF%87%E9%95%BF%E5%BA%A6%E5%8F%91%E7%94%9F%E4%BB%80%E4%B9%88%EF%BC%9F"><span class="toc-number">7.</span> <span class="toc-text">输入超过长度发生什么？</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%86%E7%9B%96%E8%BF%94%E5%9B%9E%E5%9C%B0%E5%9D%80%E5%8F%AF%E4%BB%A5%E6%8E%A7%E5%88%B6%E7%A8%8B%E5%BA%8F%EF%BC%9F"><span class="toc-number">8.</span> <span class="toc-text">为什么覆盖返回地址可以控制程序？</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E6%A0%88%E6%BA%A2%E5%87%BA%E7%9A%84%E6%9C%AC%E8%B4%A8"><span class="toc-number">9.</span> <span class="toc-text">栈溢出的本质</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#32%E4%BD%8D%E5%92%8C64%E4%BD%8D%E6%A0%88%E6%BA%A2%E5%87%BA%E5%8C%BA%E5%88%AB"><span class="toc-number">10.</span> <span class="toc-text">32位和64位栈溢出区别</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E6%A0%88%E6%BA%A2%E5%87%BA%E7%9A%84%E6%94%BB%E5%87%BB%E6%B5%81%E7%A8%8B%E6%80%BB%E7%BB%93%E5%9B%BE"><span class="toc-number">11.</span> <span class="toc-text">栈溢出的攻击流程总结图</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E6%9C%80%E5%90%8E%E8%AE%B0%E5%BF%86"><span class="toc-number">12.</span> <span class="toc-text">最后记忆</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/09/15/%E5%88%9D%E8%AF%86%E6%A0%88%E6%BA%A2%E5%87%BA/" title="初识栈溢出：Pwn 入门基础"><img src="/img/huaban.png" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="初识栈溢出：Pwn 入门基础"/></a><div class="content"><a class="title" href="/2026/09/15/%E5%88%9D%E8%AF%86%E6%A0%88%E6%BA%A2%E5%87%BA/" title="初识栈溢出：Pwn 入门基础">初识栈溢出：Pwn 入门基础</a><time datetime="2026-09-15T02:29:23.000Z" title="发表于 2026-09-15 10:29:23">2026-09-15</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/09/14/%E5%88%9D%E8%AF%86%E5%AF%84%E5%AD%98%E5%99%A8/" title="初识寄存器"><img src="/img/jicunqi.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="初识寄存器"/></a><div class="content"><a class="title" href="/2026/09/14/%E5%88%9D%E8%AF%86%E5%AF%84%E5%AD%98%E5%99%A8/" title="初识寄存器">初识寄存器</a><time datetime="2026-09-14T11:20:29.000Z" title="发表于 2026-09-14 19:20:29">2026-09-14</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/" title="WSL2+vscode配置基础pwn环境"><img src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/3.2.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="WSL2+vscode配置基础pwn环境"/></a><div class="content"><a class="title" href="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/" title="WSL2+vscode配置基础pwn环境">WSL2+vscode配置基础pwn环境</a><time datetime="2026-09-14T09:20:29.000Z" title="发表于 2026-09-14 17:20:29">2026-09-14</time></div></div><div class="aside-list-item no-cover"><div class="content"><a class="title" href="/2026/09/14/hello-world/" title="Hello World">Hello World</a><time datetime="2026-09-14T01:02:06.972Z" title="发表于 2026-09-14 09:02:06">2026-09-14</time></div></div></div></div></div></div></main><footer id="footer" style="background: transparent;"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2026 By Anna Yanami</span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.7.0"></script><script src="/js/main.js?v=5.7.0"></script><div class="js-pjax"></div><script src="/js/custom.js"></script><script src="https://cdn.jsdelivr.net/npm/pangu@7.2.0/dist/browser/pangu.umd.js"></script><script src="/js/runtime.js"></script><script> const initPangu = () => { if (typeof pangu !== 'undefined') { pangu.spacingPage(); } }; document.addEventListener('DOMContentLoaded', initPangu); document.addEventListener('pjax:complete', initPangu); </script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
