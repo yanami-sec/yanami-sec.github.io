@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>八奈見杏菜 | ヤナミ食堂 — 败犬女主应援站</title>
+<meta name="description" content="八奈見杏菜(Yanami Anna)个人粉丝站：档案、语录、图库、表情包、便当日记、每日打卡。失恋也要吃饱！">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='52' font-size='52'%3E%F0%9F%90%BE%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-theme="dark">
+
+<!-- ══════════ 加载画面 ══════════ -->
+<div id="splash" aria-hidden="true">
+  <div class="splash-inner">
+    <div class="splash-bowl">🍚</div>
+    <div class="splash-title">ヤナミ食堂</div>
+    <div class="splash-sub" id="splashText">正在盛炒饭…</div>
+    <div class="splash-bar"><i></i></div>
+  </div>
+</div>
+
+<!-- ══════════ 顶部导航 ══════════ -->
+<header id="topbar">
+  <a class="logo" href="#hero">
+    <span class="logo-paw">🐾</span>
+    <span class="logo-txt">ヤナミ食堂<small>YANAMI DINER</small></span>
+  </a>
+  <nav id="mainNav">
+    <a href="#profile">档案</a>
+    <a href="#quotes">语录</a>
+    <a href="#gallery">图库</a>
+    <a href="#stickers">表情包</a>
+    <a href="#diary">便当日记</a>
+    <a href="#letters">传话小纸条</a>
+    <a href="#checkin">打卡应援</a>
+    <a href="#game">干杯挑战</a>
+    <a href="#about">关于</a>
+  </nav>
+  <div class="topbar-acts">
+    <a href="/" class="icon-btn" title="返回博客" aria-label="返回博客">⌂</a>
+    <button id="sfxBtn" class="icon-btn" title="音效开关">🔊</button>
+    <button id="bgmBtn" class="icon-btn" title="小食堂BGM">🎵</button>
+    <button id="themeBtn" class="icon-btn" title="切换明暗 (T)"><span id="themeIcon">🌙</span></button>
+    <button id="menuBtn" class="icon-btn only-mobile" title="菜单">☰</button>
+  </div>
+</header>
+
+<main>
+<!-- ══════════ ① 首页 ══════════ -->
+<section id="hero" class="sec">
+  <div id="heroBg" aria-hidden="true"></div>
+  <div class="hero-speedlines" aria-hidden="true"></div>
+  <div class="hero-inner wrap">
+    <p class="hero-vert">負けヒロインの中の負けヒロイン</p>
+    <div class="hero-main">
+      <div class="hero-en" aria-hidden="true">YANAMI&nbsp;ANNA</div>
+      <h1 class="hero-title">八奈見<span class="hero-title-dot">杏菜</span></h1>
+      <p class="hero-romaji">やなみ あんな / Yanami Anna / CV.遠野ひかる</p>
+      <p class="hero-slogan">「失恋也要吃饱，<b>败北也要响亮地干杯</b>。」</p>
+      <div class="hero-quote chip" id="dailyQuote">…</div>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="#gallery">🍗 进入图库</a>
+        <a class="btn btn-ghost" href="#checkin">🍻 今日打卡</a>
+      </div>
+      <div class="hero-stats" id="heroStats">
+        <span><b id="statImgs">–</b> 张图</span><i></i>
+        <span>收藏 <b id="statFavs">–</b></span><i></i>
+        <span>打卡 <b id="statDays">–</b> 天</span><i></i>
+        <span>干杯 <b id="statCheers">–</b> 次</span>
+      </div>
+    </div>
+    <div class="hero-cards" aria-hidden="true">
+      <div class="hero-card hc1"><em>敗北歴</em><b>1 敗</b><small>本人坚称不算</small></div>
+      <div class="hero-card hc2"><em>今日心情</em><b id="heroMood">元气满满</b><small>饭点驱动型少女</small></div>
+      <div class="hero-card hc3"><em>必杀技</em><b>扫荡便当</b><small>玉子烧判定中…</small></div>
+    </div>
+  </div>
+  <div class="hero-scroll" aria-hidden="true">SCROLL ▼</div>
+</section>
+
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track" id="marqueeTrack"></div>
+</div>
+
+<!-- ══════════ ② 档案 ══════════ -->
+<section id="profile" class="sec">
+  <div class="wrap">
+    <header class="sec-head">
+      <span class="sec-vert">プロフィール</span>
+      <h2>角色档案 <small>PROFILE</small></h2>
+      <p class="sec-desc">把她的设定，像菜单一样摆好。</p>
+    </header>
+    <div class="profile-grid">
+      <figure class="profile-photo polaroid">
+        <img id="profileImg" alt="八奈見杏菜" loading="lazy">
+        <figcaption>© 各自权利人 · 个人欣赏用</figcaption>
+      </figure>
+      <div class="profile-info">
+        <h3 class="profile-name">八奈見 杏菜<span class="profile-badge">败犬女主 No.1</span></h3>
+        <dl class="profile-dl">
+          <div><dt>生日</dt><dd>11月29日 · 射手座 🏹 <button class="mini-link" id="bdBtn">距生日 <b id="bdDays">…</b></button></dd></div>
+          <div><dt>身高</dt><dd>156 cm（据说是干饭转化率极高的体型）</dd></div>
+          <div><dt>声优</dt><dd>遠野ひかる（远野光）</dd></div>
+          <div><dt>学校</dt><dd>つわぶき高校（津和吹高中）</dd></div>
+          <div><dt>喜欢</dt><dd>炒饭 · 草莓蛋糕 · 布丁 · 别人的便当 · 温水的水壶</dd></div>
+          <div><dt>绰号</dt><dd>小八 / やなちゃん / 老八 / 暴食海獭 🦦</dd></div>
+          <div><dt>属性</dt><dd>E人 · 自来熟 · 嘴硬 · 大胃王 · 败犬美学代言人</dd></div>
+        </dl>
+        <div class="tag-cloud" id="tagCloud"></div>
+      </div>
+      <div class="profile-radar card">
+        <h4>八奈见能力雷达 <small>粉丝测定 Ver.2.4</small></h4>
+        <canvas id="radar" width="360" height="330" aria-label="能力雷达图"></canvas>
+        <p class="radar-note">※「败犬力」越高代表败得越有魅力，属正面属性。</p>
+      </div>
+      <div class="profile-rel card">
+        <h4>人际关系表</h4>
+        <ul class="rel-list">
+          <li><b>温水和彦</b><span>名字像温吞白开水的同学。御用饭搭子 / 便当赞助商 / 吐槽役。</span></li>
+          <li><b>焼塩柠檬</b><span>田径部元气少女。比赛会输，但哭完接着冲。</span></li>
+          <li><b>小鞠知花</b><span>文学系少女，毒舌但心软，图书馆的同路人。</span></li>
+          <li><b>炒饭</b><span> Soulmate。无可替代。</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ③ 语录墙 ══════════ -->
+<section id="quotes" class="sec sec-alt">
+  <div class="wrap">
+    <header class="sec-head">
+      <span class="sec-vert">めいめいしゅう</span>
+      <h2>语录墙 <small>QUOTES</small></h2>
+      <p class="sec-desc">名场面 · 嘴硬发言 · 饭前祷词（部分为粉丝向演绎）</p>
+    </header>
+    <div class="quotes-acts">
+      <button class="btn btn-primary" id="quoteShuffle">🎲 随机来一句</button>
+      <span class="quotes-tip">点 ♥ 收藏喜欢的发言</span>
+    </div>
+    <div class="quote-wall masonry" id="quoteWall"></div>
+  </div>
+</section>
+
+<!-- ══════════ ④ 图库 ══════════ -->
+<section id="gallery" class="sec">
+  <div class="wrap">
+    <header class="sec-head">
+      <span class="sec-vert">ぎゃらりー</span>
+      <h2>图库 <small>GALLERY</small></h2>
+      <p class="sec-desc">从网上精选的插画 & 官方图，共 <b id="galleryCount">0</b> 张 · 点图看大图</p>
+    </header>
+    <div class="gal-acts">
+      <div class="gal-tabs" id="galTabs">
+        <button data-f="all" class="on">全部</button>
+        <button data-f="official">官方图</button>
+        <button data-f="fanart">同人插画</button>
+        <button data-f="cute">可爱系</button>
+        <button data-f="food">干饭系</button>
+        <button data-f="fav">❤ 我的收藏</button>
+      </div>
+      <div class="gal-tools">
+        <button class="btn btn-ghost" id="galShuffle" title="随机抽一张 (R)">🔀 随机一张</button>
+        <button class="btn btn-ghost" id="galShuffleWall">🧱 打乱排序</button>
+      </div>
+    </div>
+    <div class="gal-wall masonry" id="galWall"></div>
+    <p id="galEmpty" class="empty-tip" hidden>这个分类还没有图…（or 你还没收藏过，快去点亮 ♥ ）</p>
+  </div>
+</section>
+
+<!-- ══════════ ⑤ 表情包 ══════════ -->
+<section id="stickers" class="sec sec-alt">
+  <div class="wrap">
+    <header class="sec-head">
+      <span class="sec-vert">スタンプ</span>
+      <h2>表情包 <small>STICKERS</small></h2>
+      <p class="sec-desc">聊天必备 · 点开大图后可一键保存</p>
+    </header>
+    <div class="sticker-grid" id="stickerGrid"></div>
+    <p id="stickerEmpty" class="empty-tip" hidden>表情包素材还在锅里，稍后再来看看。</p>
+  </div>
+</section>
+
+<!-- ══════════ ⑥ 便当日记 ══════════ -->
+<section id="diary" class="sec">
+  <div class="wrap">
+    <header class="sec-head">
+      <span class="sec-vert">べんとうにっき</span>
+      <h2>便当日记 <small>BENTO DIARY</small></h2>
+      <p class="sec-desc">只属于你的小本本：随笔、感想、今天又想起她了…（保存在本机）</p>
+    </header>
+    <div class="diary-editor card">
+      <div class="diary-meta">
+        <input id="diaryTitle" type="text" maxlength="30" placeholder="标题：今天也是想吃炒饭的一天">
+        <div class="mood-pick" id="moodPick">
+          <button class="on" data-mood="🍱">🍱 干饭</button>
+          <button data-mood="🥲">🥲 败北</button>
+          <button data-mood="😊">😊 元气</button>
+          <button data-mood="🍻">🍻 干杯</button>
+          <button data-mood="🌙">🌙 深夜emo</button>
+        </div>
+      </div>
+      <textarea id="diaryText" rows="4" placeholder="写下今天想记下的事…（Ctrl+Enter 快速保存）"></textarea>
+      <div class="diary-acts">
+        <button class="btn btn-primary" id="diarySave">🍚 收进便当盒</button>
+        <span class="diary-count" id="diaryCount"></span>
+      </div>
+    </div>
+    <div class="diary-list" id="diaryList"></div>
+  </div>
+</section>
+
+<!-- ══════════ ⑦ 传话小纸条 ══════════ -->
+<section id="letters" class="sec sec-alt">
+  <div class="wrap">
+    <header class="sec-head">
+      <span class="sec-vert">ラブレター？</span>
+      <h2>传话小纸条 <small>LETTERS</small></h2>
+      <p class="sec-desc">把想对她说的话贴在食堂留言板上，她会「回信」的（大概吧）</p>
+    </header>
+    <div class="letter-board">
+      <div class="letter-input card">
+        <textarea id="letterText" rows="3" maxlength="120" placeholder="例：八奈见桑，今天也辛苦了，记得吃饭！"></textarea>
+        <button class="btn btn-primary" id="letterSend">📮 贴上去</button>
+      </div>
+      <div class="letter-replies" id="letterReplies"></div>
+      <div class="letter-wall" id="letterWall"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ⑧ 打卡应援 ══════════ -->
+<section id="checkin" class="sec">
+  <div class="wrap">
+    <header class="sec-head">
+      <span class="sec-vert">おうえん</span>
+      <h2>打卡应援 <small>CHEER</small></h2>
+      <p class="sec-desc">每天来举一次杯，让败犬知道有人撑她</p>
+    </header>
+    <div class="checkin-grid">
+      <div class="card checkin-main">
+        <button id="checkinBtn" class="checkin-btn">
+          <span class="cb-emoji">🍻</span>
+          <span class="cb-txt" id="checkinBtnTxt">今日打卡</span>
+        </button>
+        <div class="checkin-stats">
+          <div><b id="ciStreak">0</b><span>连续天数</span></div>
+          <div><b id="ciTotal">0</b><span>累计打卡</span></div>
+          <div><b id="ciPercent">0%</b><span>本月出勤</span></div>
+        </div>
+        <p class="checkin-tip" id="checkinTip"></p>
+      </div>
+      <div class="card checkin-cal">
+        <h4>应援热度图 <small>近 15 周</small></h4>
+        <div class="heatmap" id="heatmap"></div>
+        <div class="heat-legend">少 <i class="h0"></i><i class="h1"></i><i class="h2"></i><i class="h3"></i> 多</div>
+      </div>
+      <div class="card cheers">
+        <h4>自由干杯区</h4>
+        <button id="cheerBtn" class="cheer-btn">🍻 干杯！</button>
+        <p>已为八奈见举杯 <b id="cheerCount">0</b> 次</p>
+      </div>
+      <div class="card fortune">
+        <h4>今日败犬运势 <small id="fortuneDate"></small></h4>
+        <p class="fortune-result" id="fortuneResult">…</p>
+        <p class="fortune-sub" id="fortuneSub"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ⑨ 干杯挑战 ══════════ -->
+<section id="game" class="sec sec-alt">
+  <div class="wrap">
+    <header class="sec-head">
+      <span class="sec-vert">ちゃーはん</span>
+      <h2>大胃王挑战 <small>CHAHAN RUSH</small></h2>
+      <p class="sec-desc">10 秒内帮八奈见炫完尽可能多的炒饭！</p>
+    </header>
+    <div class="game-wrap card">
+      <div class="game-hud">
+        <span>剩余 <b id="gTime">10.0</b>s</span>
+        <span>本局 <b id="gScore">0</b> 碗</span>
+        <span>最高纪录 <b id="gBest">0</b> 碗</span>
+      </div>
+      <div class="game-stage" id="gameStage">
+        <button id="gameStart" class="btn btn-primary">▶ 开始挑战</button>
+        <p class="game-hint" id="gameHint">点击「开始挑战」，然后疯狂点炒饭！</p>
+      </div>
+      <p class="game-rank" id="gameRank"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ ⑩ 关于 ══════════ -->
+<section id="about" class="sec">
+  <div class="wrap">
+    <header class="sec-head">
+      <span class="sec-vert">らくがき</span>
+      <h2>关于本站 <small>ABOUT</small></h2>
+      <p class="sec-desc">一个自用的小食堂，兼败犬应援所</p>
+    </header>
+    <div class="about-grid">
+      <div class="card about-links">
+        <h4>🔗 传送门</h4>
+        <ul>
+          <li><a href="https://zh.moegirl.org.cn/%E5%85%AB%E5%A5%88%E8%A6%8B%E6%9D%8F%E8%8F%9C" target="_blank" rel="noopener">萌娘百科 · 八奈見杏菜</a></li>
+          <li><a href="https://bgm.tv/subject_search?search_text=%E8%B4%A5%E7%8A%AC%E5%A5%B3%E4%B8%BB%E5%A4%AA%E5%A4%9A%E4%BA%86" target="_blank" rel="noopener">Bangumi · 败犬女主太多了！</a></li>
+          <li><a href="https://www.pixiv.net/tags.php?tag=%E5%85%AB%E5%A5%88%E8%A6%8B%E6%9D%8F%E8%8F%9C" target="_blank" rel="noopener">pixiv · 八奈見杏菜标签</a></li>
+          <li><a href="https://safebooru.org/index.php?page=post&s=list&tags=yanami_anna" target="_blank" rel="noopener">Safebooru · yanami_anna</a></li>
+          <li><a href="https://search.bilibili.com/all?keyword=%E5%85%AB%E5%A5%88%E8%A7%81%E6%9D%8F%E8%8F%9C" target="_blank" rel="noopener">哔哩哔哩 · 相关视频</a></li>
+          <li><a href="https://baike.baidu.com/item/%E5%85%AB%E5%A5%88%E8%A7%81%E6%9D%8F%E8%8F%9C" target="_blank" rel="noopener">百度百科 · 条目</a></li>
+        </ul>
+      </div>
+      <div class="card about-keys">
+        <h4>⌨️ 快捷键</h4>
+        <ul>
+          <li><kbd>1</kbd>~<kbd>9</kbd> 跳转版块</li>
+          <li><kbd>T</kbd> 明暗主题 · <kbd>R</kbd> 随机图</li>
+          <li><kbd>Esc</kbd> 关闭灯箱 / 弹层</li>
+          <li><kbd>←</kbd><kbd>→</kbd> 灯箱切换</li>
+          <li>彩蛋：试着输入 ↑↑↓↓←→←→BA</li>
+        </ul>
+      </div>
+      <div class="card about-data">
+        <h4>💾 我的数据</h4>
+        <p>日记、纸条、收藏、打卡都只存在你自己的浏览器里。</p>
+        <div class="about-data-btns">
+          <button class="btn btn-ghost" id="exportBtn">⬇ 导出备份</button>
+          <button class="btn btn-ghost" id="importBtn">⬆ 导入备份</button>
+          <button class="btn btn-danger" id="resetBtn">🗑 清空全部</button>
+        </div>
+        <input type="file" id="importFile" accept="application/json" hidden>
+      </div>
+      <div class="card about-note">
+        <h4>🐾 声明</h4>
+        <p>本站为个人粉丝向收藏页，不用于任何商业用途。图片来自网络（Safebooru 等公开图站），版权归原作者及原画师所有；「败犬女主太多了！」著作权归 雨森焚火・小学館 及动画制作委员会所有。看到喜欢的图请去原作者主页点赞！</p>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer id="footer">
+  <p class="foot-line">「失恋也要吃饱」——ヤナミ食堂 · 常营业</p>
+  <p class="foot-sub">Made with 🍚 & 🍻 for 八奈見杏菜 · <span id="visitInfo"></span></p>
+  <button id="toTop" title="回到顶部">🐾</button>
+</footer>
+
+<!-- ══════════ 灯箱 ══════════ -->
+<div id="lightbox" hidden>
+  <button class="lb-close" title="关闭 (Esc)">✕</button>
+  <button class="lb-prev" title="上一张 (←)">‹</button>
+  <figure class="lb-stage">
+    <img id="lbImg" alt="">
+    <figcaption class="lb-bar">
+      <span id="lbInfo"></span>
+      <span class="lb-acts">
+        <button id="lbFav">♡ 收藏</button>
+        <button id="lbDownload">⬇ 保存图片</button>
+        <a id="lbSource" target="_blank" rel="noopener">↗ 原图出处</a>
+      </span>
+    </figcaption>
+  </figure>
+  <button class="lb-next" title="下一张 (→)">›</button>
+</div>
+
+<!-- ══════════ 设置 & 弹层 ══════════ -->
+<div id="toast" hidden></div>
+<div id="fxLayer" aria-hidden="true"></div>
+
+<script src="js/data.js"></script>
+<script src="js/gallery-data.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/store.js"></script>
+<script src="js/gallery.js"></script>
+<script src="js/features.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
