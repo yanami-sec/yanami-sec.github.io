@@ -26,7 +26,5 @@ licenses of the referenced projects or imply their endorsement.
 
 ## Music
 
-No music recording is distributed in this repository or its public demo videos.
-The downloadable demo videos in Releases have their audio tracks removed.
-Optional music is supplied
-by the person deploying the website and is not covered by this project's MIT license.
+Blog background music: 所念皆星河 — CMJ.
+The recording is not covered by the source code’s MIT license.

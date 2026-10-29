@@ -72,7 +72,7 @@ let active = false;
 let heartbeatTimer = 0;
 let cardInteraction=null;
 
-const BACKGROUND_MUSIC = { src: "", title: "" };
+const BACKGROUND_MUSIC = {"src":"audio/birthday-theme.mp3","title":"所念皆星河 · CMJ"};
 let backgroundAudio = null;
 let musicEnabled = false;
 let musicWanted = false;
